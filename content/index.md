@@ -9,3 +9,11 @@ Welcome to the *FIRST* Chesapeake Knowledgebase! It is our goal to use this plat
 Select the program whose knowledgebase you would like to see:
 # [[FTC/index|FTC]]
 # [[FRC/index|FRC]]
+
+
+****
+
+
+> [!summary] Knowledgebase version 26.0.0
+> Check the header of each page for its last updated version. A summary changelog appears below:
+> Initial release for 2025-2026 season
