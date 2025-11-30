@@ -64,6 +64,10 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 ## Track 5 (Finishing Touches)
 - [[FRC/FRC-AV/Track 5/5a. Setup Audience Display]]
 - [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup]]
-
+## Track 6 (Venue-Dependent Items)
+- [[FRC/FRC-AV/Track 6/6a. Set up Mesh AP|6a. Set up Mesh AP]]
+# Reference Materials
+These guides have been written to aid AV operations efforts during the event.
+- [[FRC/FRC-AV/Sound Board Operators' Guide|Sound Board Operators' Guide]]
 %%## Striking and Teardown
  - Locations for Teardown%%
