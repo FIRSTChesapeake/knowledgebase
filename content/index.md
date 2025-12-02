@@ -14,6 +14,6 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.0.0
-> Check the header of each page for its last updated version. A summary changelog appears below:
-> Initial release for 2025-2026 season
+> [!summary] Knowledgebase version 26.0.1
+> Changes from v26.0.0:
+> Fix image file name conflicts
