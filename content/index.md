@@ -11,5 +11,9 @@ Select the program whose knowledgebase you would like to see:
 # [[FRC/index|FRC]]
 
 
-> [!warning] Pardon Our Dust!
->This site is still under development. Contents may be rewritten, relocated or otherwise updated at any time. Bookmarking pages is not advised at this time. Additionally, there is a lot of content still to be written! If you would like to assist, please check the repository out at https://github.com/FIRSTChesapeake/Knowledgebase.
+****
+
+
+> [!summary] Knowledgebase version 26.0.0
+> Check the header of each page for its last updated version. A summary changelog appears below:
+> Initial release for 2025-2026 season

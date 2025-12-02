@@ -5,23 +5,23 @@ This series of articles is intended to walk an event volunteer through setting u
 # Equipment Locations and Storage Descriptions
 All A/V equipment will be located in one of the following locations, and it all must go **back** into one of these locations at the conclusion of the event. It is important to keep the equipment organized. The equipment should be placed back in the locations where you found it unless the Equipment Manager or FTA states otherwise. Here is a list of all of the locations where our A/V equipment can be found:
 1.  *Streaming Unit case*
-This is also known as the "Webstream Unit", "Streaming Unit", or other similar names. It is a large, tall black case on wheels labeled as the "streaming unit". It contains the main streaming computer, audio mixer, and interface panels to connect other equipment to.
-%% 	TODO: Get photo of CHS Stream Unit closed and open. %%
+This is also known as the "Webstream Unit", "Streaming Unit", or other similar names. It is a large, tall black case on wheels labeled as the "streaming unit". It contains the main streaming computer, audio mixer, and interface panels to connect other equipment to.![[FRC/FRC-AV/Track 1/Media/PXL_20251117_193907475.webp]]
+
 %% 2. *Audio Case*
 This is also known as the "mic box", "mic case", or similar. It is a small, square rackmount case that has a suitcase handle and wheels. It contains the equipment needed to run the wireless microphones.
  TODO: Get photo of audio case closed and open.  %%
  2. *Storage case*
-This is a short, wheeled black case that contains storage drawers for key A/V equipment. It contains the cameras, microphones, microphone antenna, keyboard and mouse for the Streaming Unit, among other key cables and items. 
-%%TODO: Get photo of storage case closed and open.%%
+This is a short, wheeled black case that contains storage drawers for key A/V equipment. It contains many key cables and smaller items for AV setup. 
+![[FRC/FRC-AV/Track 1/Media/PXL_20251117_193737105.MP.webp]]
 3.  *A/V Totes*
 These are a series of four green totes, labeled on each short side with gaff tape as "A/V", a route label (north or south) and a specific type label. There are four A/V totes: Audio, Power, SDI, and Ethernet. 
 %% TODO: Get photo of tote stack, preferably also one with the totes open. %%
 4. *A/V Case*
-This is also known as "Case 26". It is a large, tan, wheeled case that contains miscellaneous equipment used for A/V, but the most relevant contents for this guide are the audio mixer, speakers, and projector. 
-%% TODO: Get photo of Case 26 closed and open. %%
+This is also known as "Case 26". It is a large tan or brown wheeled case that contains miscellaneous larger equipment used for A/V. Commonly used items in this case include the projector, speakers, and tripods. 
+![[FRC/FRC-AV/Track 1/Media/PXL_20251117_194631349.webp]]
 5. *Projection Screen case*
 This is a short, long, black wheeled case that contains the large projection screen used at events.
-%% TODO: Get photo of projector screen case. %%
+![[FRC/FRC-AV/Track 1/Media/IMG_20251115_122431_HDR.webp]]
 
 Let's now discuss the organized chaos of A/V setup (not to be confused with that of the field setup, which is its own beast!).
 # Stages and Order of Setup
@@ -34,32 +34,40 @@ The setup of the FIRST Chesapeake Audio/Visual equipment can be broken down into
 ## Track 0 (Gathering Materials)
 Each of the five pieces of Equipment Storage described above should be moved to near where they will live during the event after they are removed from the PODS. Each event has a designated location for the screen and for A/V equipment, please consult with the Equipment Manager to determine where the setup is to be located. In the Equipment Manager's absence, the Event Manager can also provide guidance.
 ## Track 1 (Core Streaming Unit & Network Setup)
-- [[1a. Initial Streaming Unit Setup and Core Cabling]]
-- [[1b. Connect Network Cables]]
-- [[1c. Start Up Streaming Unit]]
-- [1d. Test Connectivity](1d.%20Test%20Connectivity.md)
-- (If necessary for troubleshooting) [[1e. Troubleshoot Connectivity Issues]]
-- [[1f. Sync Media Files]]
+- [[FRC/FRC-AV/Track 1/1a. Initial Streaming Unit Setup and Core Cabling]]
+- [[FRC/FRC-AV/Track 1/1b. Connect Network Cables]]
+- [[FRC/FRC-AV/Track 1/1c. Start Up Streaming Unit]]
+- [1d. Test Connectivity](FRC/FRC-AV/Track%201/1d.%20Test%20Connectivity.md)
+- (If necessary for troubleshooting) [[FRC/FRC-AV/Track 1/1e. Troubleshoot Connectivity Issues]]
+- [[FRC/FRC-AV/Track 1/1f. Open Key Programs]]
 
-## Track 2 (Camera Setup)
-- [2a. Mount Center Camera](2a.%20Mount%20Center%20Camera.md)
-- [[2b. Mount and Cable Alliance Cameras]]
-- [[2c. Cable Center Camera]] (Includes cable back to Streaming Unit)
+## Track 2 (Audio Setup)
+- [[FRC/FRC-AV/Track 2/2a. Connect Microphone Antenna]]
+- [[FRC/FRC-AV/Track 2/2b. Radio Frequency Coordination]]
+- [[FRC/FRC-AV/Track 2/2c. Sync Microphones and Receivers]]
+- [[FRC/FRC-AV/Track 2/2d. Setup Microphone Chargers]]
+- [[FRC/FRC-AV/Track 2/2e. Connect Speakers]]
+- [[FRC/FRC-AV/Track 2/2f. Initialize Sound Mixer]]
+- [[FRC/FRC-AV/Track 2/2g. Connect Music Input]]
+- [[FRC/FRC-AV/Track 2/2h. Sound Check and Gain Leveling]]
+## Track 3 (Camera Setup)
+- [3a. Mount Center Camera](FRC/FRC-AV/Track%203/3a.%20Mount%20Center%20Camera.md)
+- [[FRC/FRC-AV/Track 3/3b. Mount and Cable Alliance Cameras]]
+- [[FRC/FRC-AV/Track 3/3c. Cable Center Camera]] (Includes cable back to Streaming Unit)
  %%(New for 2025) Mount Flex Camera%%
 %%(New for 2025) Cable Flex Camera (Includes cable back to Streaming Unit)%%
 
-## Track 3 (Audio Setup)
-- [[3a. Connect Microphone Antenna]]
-- [[3b. Radio Frequency Coordination]]
-- [[3c. Sync Microphones and Receivers]]
-- [[3d. Setup Microphone Chargers]]
-- [[3e. Connect Speakers]]
-- [[3f. Sound Check and Gain Leveling]]
+
 ## Track 4 (Screen and Projector Setup)
-- [[4a. Unpack and Assemble Screen]]
-- [[4b. Unpack and Setup Projector]]
+- [[FRC/FRC-AV/Track 4/4a. Unpack and Assemble Screen]]
+- [[FRC/FRC-AV/Track 4/4b. Unpack and Setup Projector]]
 ## Track 5 (Finishing Touches)
-- Setup Audience Display
-- Setup OBS (see also [[OBS Operators' Guide]] (coming soon))
-## Striking and Teardown
- - Locations for Teardown
+- [[FRC/FRC-AV/Track 5/5a. Setup Audience Display]]
+- [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup]]
+## Track 6 (Venue-Dependent Items)
+- [[FRC/FRC-AV/Track 6/6a. Set up Mesh AP|6a. Set up Mesh AP]]
+# Reference Materials
+These guides have been written to aid AV operations efforts during the event.
+- [[FRC/FRC-AV/Sound Board Operators' Guide|Sound Board Operators' Guide]]
+%%## Striking and Teardown
+ - Locations for Teardown%%
