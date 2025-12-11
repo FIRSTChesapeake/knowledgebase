@@ -112,9 +112,8 @@
     --callout-icon: var(--callout-icon-example);
   }
   &[data-callout="steps"] {
-    --color: #000000;
-    --border: #bb7b7b7;
-    --bg: #e5e5e5;
+    --color: var(--secondary);
+    --border: var(--lightgray);
     --callout-icon: var(--callout-icon-example);
   }
 
