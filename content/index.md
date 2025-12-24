@@ -14,7 +14,7 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.0.2
-> Changes from v26.0.1:
-> - Add additional clarifying details and pictures to steps for microphone sync, projector setup and OBS setup. No substantive changes were made to instructions.
-> - Fix dark mode styling issue with step lists.
+> [!summary] Knowledgebase version 26.1.0
+> Changes from v26.0.2:
+> - Added a setup guide for FTC inspection tracking.
+> - Added a new landing page for guides related to FTC scoring system setup.
