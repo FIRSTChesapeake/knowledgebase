@@ -7,4 +7,5 @@ While we make every effort to ensure these guides are in agreement with the offi
 The following guides are currently available:
 # [[Inspection Tracking Setup and Usage]]
 # [[Field Timer (Raspberry Pi) Setup]]
+# [[Head Referee & Referee Tablet Setup]]
 
