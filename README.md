@@ -1,4 +1,4 @@
-# [View the Knowledgebase 🚀](https://firstchesapeake.github.io/Knowledgebase/)
+# [View the Knowledgebase 🚀](https://firstchesapeake.github.io/knowledgebase/)
 Welcome to the Chesapeake Knowledgebase repository. This repository is intended to host instructions for the setup of equipment at [FRC](https://www.firstinspires.org/robotics/frc/) and [FTC](https://www.firstinspires.org/robotics/ftc/) events that are hosted by [FIRST Chesapeake](https://firstchesapeake.org/). 
 
 # Project Details

@@ -1,0 +1,34 @@
+name: Knowledgebase Typographical Issue
+description: Report an issue with the spelling, grammar, or other typography of the knowledgebase
+title: "editorial: "
+labels: editorial-issue
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If your issue relates to incorrect steps or technical details, please use the Content Issue issue type instead.
+  - type: input
+    id: url
+    attributes:
+      label: Link to Article
+      description: Which article has the issue?
+      placeholder: ex. https://firstchesapeake.github.io/knowledgebase/[....]
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Issue Description
+      description: What is wrong in the article?
+      placeholder: ex. Step 1 typos 'first' as 'frist'.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Desired Resolution (Optional)
+      description: If not simple typo correction or another obvious action, how can the article be fixed?
+      placeholder: ex. Restructure the paragraph to separate discussion of the first topic from the second.
+    validations:
+      required: false

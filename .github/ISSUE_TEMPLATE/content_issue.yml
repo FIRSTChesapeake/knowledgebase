@@ -1,0 +1,34 @@
+name: Knowledgebase Content Issue
+description: Report an issue with the content of the knowledgebase
+title: "content: "
+labels: content-issue
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If your issue relates to spelling, grammar, or other editorial issues, please use the Typographical Issue issue type instead.
+  - type: input
+    id: url
+    attributes:
+      label: Link to Article
+      description: Which article has the issue?
+      placeholder: ex. https://firstchesapeake.github.io/knowledgebase/[....]
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Issue Description
+      description: What is wrong in the article?
+      placeholder: ex. Step 4 describes clicking a button that does not exist in the location shown.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Desired Resolution
+      description: How can the article be fixed?
+      placeholder: ex. Correct the description and screenshot of the button to specify it is located in the menu.
+    validations:
+      required: true
