@@ -1,7 +1,3 @@
-# Contents
-1. [[#Initial Setup]]
-
-# Initial Setup
 1. Ensure that the server is logged into with "Event Admin" permissions or higher. The default 'local' user has these permissions.
 2. Click the FTC Logo to go to the event homepage.
 3. Scroll down to section Event Administration and click Match Control Page.
