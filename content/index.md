@@ -14,7 +14,7 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.1.0
-> Changes from v26.0.2:
-> - Added a setup guide for FTC inspection tracking.
-> - Added a new landing page for guides related to FTC scoring system setup.
+> [!summary] Knowledgebase version 26.2.0
+> Changes from v26.1.0:
+> - Added a setup guide for FTC referee tablet setup.
+
