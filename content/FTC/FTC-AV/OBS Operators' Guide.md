@@ -30,16 +30,25 @@ draft: "true"
   **This scene should not be switched to.** This is a "utility" scene that provides the input from the scoring system/audience display, to other scenes, for the same reasons as the Audio and ProPresenter scenes.
 - Test
 	**This scene is obsolete.** Fullscreen display of a projector test pattern. Should not be necessary with the latest projector equipment.
-# General Scene Flow
-In general, an FTC event will use scenes in roughly this order.
-## Start of Day until Opening Ceremonies
-- Center Only with audience display overlay showing fullscreen inspection status and/or match schedule (i.e., camera is not actually displayed here). 
+# General Video Event Flow
+## Venue Open until Start of Stream - Typically 7:00-10:00 AM
+- Center Only with audience display overlay showing fullscreen inspection status
 - Play event-specific welcome video when crowd begins to enter. ProPresenter will show on top of audience display overlay.
-	- Occasional replays can help to break up the morning activities.
+	- Recommend alternating between the two periodically.
+- When all teams are finished with inspection, it is recommended to alternate between Particle and the event welcome video.
+## Start of Stream - Typically 10:00 AM
+- Particle to start all streams until opening ceremonies. 
+- **Note down the time of stream start** in the OBS Autoswitcher to provide a start point for stream time stamps. If this isn't completely accurate, that is OK - the timestamps can be corrected afterwards.
 ## Opening Ceremonies
-- Center Only without audience display overlay.
-	- Can either request scorekeepers to show "video only" in FTC Live, or temporarily hide the Aud Display (Main) scene within the Center Only scene.
-## Match Play
-- Alternate (preferably using autoswitcher) between Red Only and Blue Only scenes according to the match currently being played. See steps 12 onward in [[FTC/FTC-AV/Track 5/5b. Finish OBS Setup||Finish OBS Setup]] for details on configuring the autoswitcher.
+- Center Only without audience display overlay. **Temporarily disconnect the auto-switcher from OBS to avoid having scenes changed on you by the scorekeepers performing match operations during opening ceremonies.**
+	- Can either request scorekeepers to show "video only" in FTC Live, or temporarily hide the Aud Display (Main) scene (click the eye icon to hide) within the Center Only scene.
+- Videos play during the opening ceremonies - they are called out in the script. Use ProPresenter to play the videos over the Center Only scene - **do not play opening ceremony videos through FTC Live**.
+- After opening ceremonies conclude, re-connect the auto-switcher to OBS if it was disconnected previously.
+## Match Play - For Morning Qualifiers, Afternoon Qualifiers, and Playoff Matches
+- Alternate (preferably using autoswitcher) between Red Only and Blue Only scenes according to the match currently being played. See the linked section of [[FTC/FTC-AV/Track 5/5b. Finish OBS Setup#12. Open the auto-switcher tool at https //obs.vens.co in a new browser window.||Finish OBS Setup]] (step 12 onwards) for details on configuring the autoswitcher. 
 ## Lunch
 - Leave the autoswitcher and the scenes alone, but it's recommended to display a message explaining that the event is at lunch, and when it is scheduled to resume. This is easiest to do by asking the scorekeepers to put up a message with this information.
+## Alliance Selection
+- Alliance Selection - be aware that you may need to make adjustments to the camera view within the overlay. Pan/zoom the image so that only the area between fields is visible for best effect.
+## Awards
+- Center Only with audience display overlay. **Temporarily disconnect the auto-switcher from OBS to avoid having scenes changed on you by the scorekeepers performing match operations towards the end of awards breaks.** Be sure to reconnect after the award break is finished.
