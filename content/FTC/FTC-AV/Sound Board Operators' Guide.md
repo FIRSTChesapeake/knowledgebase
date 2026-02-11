@@ -53,6 +53,8 @@ When determining audio levels, some sounds take precedence over others.
 You should ensure that the relative volume of each sound source allows these priorities to shine though. The sound board helps you with this through the use of a dynamic volume adjuster. The sound from the music inputs is programmed to duck, or temporarily reduce volume, when any sound from game sounds or emcee and commentator mics reaches over a certain threshold. This is an intentional event sound design choice should not be altered or disabled by the sound board operator.
 
 
+
+
 ### Soundboard Manual
 The manufacturer's manuals for the soundboard can be found here:
 #### [Quick Start/Owner's Manual](https://usa.yamaha.com/files/download/other_assets/1/1525801/dm3_en_om_b1.pdf)

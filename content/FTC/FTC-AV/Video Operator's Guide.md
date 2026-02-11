@@ -13,11 +13,14 @@ draft: "true"
 [[#Application Introductions]]
 	[[#OBS]]
 	[[#ProPresenter]]
+	[[#Epson Setting Assistant (iPad)]]
+	[[#DM3 StageMix (iPad)]]
+	[[#OBS Blade (iPad)]]
 [[#Description of Scenes]]
 [[#General Video Event Flow]]
 	[[#Venue Open until Start of Stream - Typically 7 00-10 00 AM|~7-10AM]]
 	[[#Start of Stream - Typically 10 00 AM|~10 AM]]
-	[[#Opening Ceremonies - Typically 10 30 AM|Opening Ceremonies]]
+	[[#Opening Ceremonies - Typically 10 30 AM|Opening Ceremonies (~10:30 AM)]]
 	[[#Match Play - For Morning Qualifiers, Afternoon Qualifiers, and Playoff Matches|Match Play]]
 	[[#Lunch]]
 	[[#Alliance Selection]]
@@ -46,7 +49,20 @@ This screenshot shows a typical view of ProPresenter.
 5. Clear Buttons. This stops the content being played. Click the red X to abort the current video.
 6. Playback controls. This can pause, rewind or scrub within the content being presented.
 
+## Epson Setting Assistant (iPad)
 
+This app is used to adjust the projector image to the screen. This application is very simple and utilitarian, so is hopefully self-explanatory. More information on using the app can be found in [[FTC/FTC-AV/Track 4/4b. Unpack and Setup Projector|4b. Unpack and Setup Projector]]. 
+## DM3 StageMix (iPad)
+This app is used to remotely operate the audio mixer. You can perform the majority of operations on the mixer from this app, including volume and other parameter control. 
+
+> [!important] Getting the Fader Layout Onto the iPad
+> By default, the custom fader banks are not imported from the mixer to the app when connecting. You will need to select "Custom1" on the first screen of the app to sync them. ![[dm3-sm-select.webp]]
+> Once connected, tap the button at the top to toggle between default and custom order.
+> ![[dm3-sm-fader-bank-select.png]]
+## OBS Blade (iPad)
+This app allows remote control of OBS running on the Streaming Unit computer. On top of allowing you to switch scenes remotely, you can also preview the currently previewed scene. This is a very helpful feature when adjusting cameras!
+> [!NOTE] Screenshots Coming Soon
+> Please pardon the lack of iPad screenshots. We are working to get screenshots for this article soon.
 # Description of Scenes
 Our standard OBS setup includes several scenes. Here's a description of what each of them include.
 - Blue Only (Field 1)
@@ -97,14 +113,14 @@ Next, let's discuss when these scenes are typically used during an event, as wel
 ## Lunch
 - Leave the autoswitcher and the scenes alone, but it's recommended to display a message explaining that the event is at lunch, and when it is scheduled to resume. This is easiest to do by asking the scorekeepers to put up a message with this information.
 ## Alliance Selection
-- Alliance Selection - be aware that you may need to make adjustments to the camera view within the overlay. Pan/zoom the image so that only the area between fields is visible for best effect.
+- Show Alliance Selection scene - be aware that you may need to make adjustments to the camera view within the overlay. Pan/zoom the image so that only the area between fields is visible for best effect.
 ## Awards
-- Center Only with audience display overlay. **Temporarily disconnect the auto-switcher from OBS to avoid having scenes changed on you by the scorekeepers performing match operations towards the end of awards breaks.** Be sure to reconnect after the award break is finished.
+- Show Center Only scene with audience display overlay. **Temporarily disconnect the auto-switcher from OBS to avoid having scenes changed on you by the scorekeepers performing match operations towards the end of awards breaks.** Be sure to reconnect after the award break is finished.
 ## End of Event
-- Particle for a few seconds upon event conclusion.
-- **Stop the stream on both OBS and YouTube.** Much like starting, auto-stop is not enabled on our YouTube streams for flexibility, because it does not stop the stream if connection is temporarily lost. Be sure to click the "End Stream" button in Live Control Room to stop the stream for viewers, otherwise they will see an endless buffering icon.
+- Show Particle scene for a few seconds upon event conclusion.
+- **Stop the stream on both OBS and YouTube.** Much like starting, auto-stop is not enabled on our YouTube streams for flexibility, because it does not stop the stream if connection is temporarily lost. Be sure to click the "End Stream" button in YouTube's Live Control Room to stop the stream for viewers, otherwise they will see an endless buffering icon.
 - Copy the chapters from the YouTube Video Chapters section of the FTC OBS Switcher page and paste them into the video description to add the chapters to the video.
-- Load the video of the stream and check accuracy of the chapters by clicking a chapter link. The chapters should be placed slightly before the start of the match or at the start of the match. If they are off, the times can be updated by inserting a value (positive or negative, depending on if the timestamp given is behind or ahead of the start of the match, respectively) into the Video Offset field. Once a value has been placed in the offset field, the times will update, and will need to be copy and pasted into the YouTube video description again.
+- Load the video of the stream and check accuracy of the chapters by clicking a chapter link. The chapters should be placed slightly before the start of the match or at the start of the match. If they are off, the times can be updated by inserting a value (positive or negative, depending on if the timestamp given is behind or ahead of the start of the match, respectively) into the Video Offset field. Once a value has been placed in the offset field, the times will update, and will need to be copy and pasted into the YouTube video description again. Refresh the video page when you make a change to the timestamps and check again until timestamps look good.
 
 > [!warning] Network Issues Can Break Chapters
 > If you encounter issues with the network when streaming that require you to stop and re-start the stream or that result in complete disconnection from YouTube (e.g., adjusting video bitrate, cable getting unplugged), the chapters output on the auto switcher page will not be accurate. The calculation does not take into account the time on the stream video that is lost when the stream is stopped. As of time of writing, there is no workaround to account for lost time in this manner, and inaccuracy may need to simply be accepted. The only other available option is to correct the timestamps by hand for each match occurring after the stream interruption.
