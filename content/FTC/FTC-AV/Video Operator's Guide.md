@@ -1,14 +1,3 @@
----
-draft: "true"
----
- - Walkthrough of OBS interface
-- Description of scenes
-- Walkthrough of ProPresenter interface
-- Description of interfaces between PP and OBS (NDI, alphas, etc)
-- Opening Ceremonies walkthrough
-- Alliance Selection walkthrough
-- Description of OBS auto switcher https://obs.vens.co/ (also add setup instructions to [[FTC/FTC-AV/Track 5/5b. Finish OBS Setup]]) if the test works well.
-
 # Contents
 [[#Application Introductions]]
 	[[#OBS]]
@@ -21,9 +10,9 @@ draft: "true"
 	[[#Venue Open until Start of Stream - Typically 7 00-10 00 AM|~7-10AM]]
 	[[#Start of Stream - Typically 10 00 AM|~10 AM]]
 	[[#Opening Ceremonies - Typically 10 30 AM|Opening Ceremonies (~10:30 AM)]]
-	[[#Match Play - For Morning Qualifiers, Afternoon Qualifiers, and Playoff Matches|Match Play]]
+	[[#Match Play - For Morning Qualifiers, Afternoon Qualifiers, and Playoff Matches|Match Play (Qualifiers & Playoffs)]]
 	[[#Lunch]]
-	[[#Alliance Selection]]
+	[[#Alliance Selection (~3:30 PM)]]
 	[[#Awards]]
 	[[#End of Event]]
 	
