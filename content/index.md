@@ -14,7 +14,8 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.2.0
-> Changes from v26.1.0:
-> - Added a setup guide for FTC referee tablet setup.
+> [!summary] Knowledgebase version 26.3.0
+> Changes from v26.2.0:
+> - Added a video operators' guide.
+> - Added clarifications on FTC dual-division event setup for audio.
 
