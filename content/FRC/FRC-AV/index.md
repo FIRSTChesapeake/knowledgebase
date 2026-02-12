@@ -34,36 +34,36 @@ The setup of the FIRST Chesapeake Audio/Visual equipment can be broken down into
 ## Track 0 (Gathering Materials)
 Each of the five pieces of Equipment Storage described above should be moved to near where they will live during the event after they are removed from the PODS. Each event has a designated location for the screen and for A/V equipment, please consult with the Equipment Manager to determine where the setup is to be located. In the Equipment Manager's absence, the Event Manager can also provide guidance.
 ## Track 1 (Core Streaming Unit & Network Setup)
-- [[FRC/FRC-AV/Track 1/1a. Initial Streaming Unit Setup and Core Cabling]]
-- [[FRC/FRC-AV/Track 1/1b. Connect Network Cables]]
-- [[FRC/FRC-AV/Track 1/1c. Start Up Streaming Unit]]
+- [[FRC/FRC-AV/Track 1/1a. Initial Streaming Unit Setup and Core Cabling|1a. Initial Streaming Unit Setup and Core Cabling]]
+- [[FRC/FRC-AV/Track 1/1b. Connect Network Cables|1b. Connect Network Cables]]
+- [[FRC/FRC-AV/Track 1/1c. Start Up Streaming Unit|1c. Start Up Streaming Unit]]
 - [1d. Test Connectivity](FRC/FRC-AV/Track%201/1d.%20Test%20Connectivity.md)
-- (If necessary for troubleshooting) [[FRC/FRC-AV/Track 1/1e. Troubleshoot Connectivity Issues]]
-- [[FRC/FRC-AV/Track 1/1f. Open Key Programs]]
+- (If necessary for troubleshooting) [[FRC/FRC-AV/Track 1/1e. Troubleshoot Connectivity Issues|1e. Troubleshoot Connectivity Issues]]
+- [[FRC/FRC-AV/Track 1/1f. Open Key Programs|1f. Open Key Programs]]
 
 ## Track 2 (Audio Setup)
-- [[FRC/FRC-AV/Track 2/2a. Connect Microphone Antenna]]
-- [[FRC/FRC-AV/Track 2/2b. Radio Frequency Coordination]]
-- [[FRC/FRC-AV/Track 2/2c. Sync Microphones and Receivers]]
-- [[FRC/FRC-AV/Track 2/2d. Setup Microphone Chargers]]
-- [[FRC/FRC-AV/Track 2/2e. Connect Speakers]]
-- [[FRC/FRC-AV/Track 2/2f. Initialize Sound Mixer]]
-- [[FRC/FRC-AV/Track 2/2g. Connect Music Input]]
-- [[FRC/FRC-AV/Track 2/2h. Sound Check and Gain Leveling]]
+- [[FRC/FRC-AV/Track 2/2a. Connect Microphone Antenna|2a. Connect Microphone Antenna]]
+- [[FRC/FRC-AV/Track 2/2b. Radio Frequency Coordination|2b. Radio Frequency Coordination]]
+- [[FRC/FRC-AV/Track 2/2c. Sync Microphones and Receivers|2c. Sync Microphones and Receivers]]
+- [[FRC/FRC-AV/Track 2/2d. Setup Microphone Chargers|2d. Setup Microphone Chargers]]
+- [[FRC/FRC-AV/Track 2/2e. Connect Speakers|2e. Connect Speakers]]
+- [[FRC/FRC-AV/Track 2/2f. Initialize Sound Mixer|2f. Initialize Sound Mixer]]
+- [[FRC/FRC-AV/Track 2/2g. Connect Music Input|2g. Connect Music Input]]
+- [[FRC/FRC-AV/Track 2/2h. Sound Check and Gain Leveling|2h. Sound Check and Gain Leveling]]
 ## Track 3 (Camera Setup)
 - [3a. Mount Center Camera](FRC/FRC-AV/Track%203/3a.%20Mount%20Center%20Camera.md)
-- [[FRC/FRC-AV/Track 3/3b. Mount and Cable Alliance Cameras]]
-- [[FRC/FRC-AV/Track 3/3c. Cable Center Camera]] (Includes cable back to Streaming Unit)
+- [[FRC/FRC-AV/Track 3/3b. Mount and Cable Alliance Cameras|3b. Mount and Cable Alliance Cameras]]
+- [[FRC/FRC-AV/Track 3/3c. Cable Center Camera|3c. Cable Center Camera]]
  %%(New for 2025) Mount Flex Camera%%
 %%(New for 2025) Cable Flex Camera (Includes cable back to Streaming Unit)%%
 
 
 ## Track 4 (Screen and Projector Setup)
-- [[FRC/FRC-AV/Track 4/4a. Unpack and Assemble Screen]]
-- [[FRC/FRC-AV/Track 4/4b. Unpack and Setup Projector]]
+- [[FRC/FRC-AV/Track 4/4a. Unpack and Assemble Screen|4a. Unpack and Assemble Screen]]
+- [[FRC/FRC-AV/Track 4/4b. Unpack and Setup Projector|4b. Unpack and Setup Projector]]]]
 ## Track 5 (Finishing Touches)
-- [[FRC/FRC-AV/Track 5/5a. Setup Audience Display]]
-- [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup]]
+- [[FRC/FRC-AV/Track 5/5a. Setup Audience Display|5a. Setup Audience Display]]
+- [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]]
 ## Track 6 (Venue-Dependent Items)
 - [[FRC/FRC-AV/Track 6/6a. Set up Mesh AP|6a. Set up Mesh AP]]
 # Reference Materials
