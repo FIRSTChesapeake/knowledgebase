@@ -53,12 +53,12 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 - [[FTC/FTC-AV/Track 4/4b. Unpack and Setup Projector|4b. Unpack and Setup Projector]]
 ## Track 5 (Finishing Touches)
 - [[FTC/FTC-AV/Track 5/5a. Setup Audience Display|5a. Setup Audience Display]]
-- [[FTC/FTC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]] (see also [[Video Operator's Guide]])
+- [[FTC/FTC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]] (see also [[FTC/FTC-AV/Video Operator's Guide]])
 ## Track 6 (Venue-Dependent Items)
 - [[FTC/FTC-AV/Track 6/6a. Set up Mesh AP|Set Up Mesh AP]]
 # Reference Materials
 These guides have been written to aid AV operations efforts during the event.
 - [[Sound Board Operator's Guide|Sound Board Operator's Guide]]
-- [[Video Operator's Guide]]
+- [[FTC/FTC-AV/Video Operator's Guide]]
 %%## Striking and Teardown
  - Locations for Teardown%%

@@ -69,5 +69,6 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 # Reference Materials
 These guides have been written to aid AV operations efforts during the event.
 - [[FRC/FRC-AV/Sound Board Operators' Guide|Sound Board Operators' Guide]]
+- [[Pit Stick Guide]]
 %%## Striking and Teardown
  - Locations for Teardown%%
