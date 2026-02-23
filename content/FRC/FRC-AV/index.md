@@ -10,7 +10,7 @@ This is also known as the "Webstream Unit", "Streaming Unit", or other similar n
 %% 2. *Audio Case*
 This is also known as the "mic box", "mic case", or similar. It is a small, square rackmount case that has a suitcase handle and wheels. It contains the equipment needed to run the wireless microphones.
  TODO: Get photo of audio case closed and open.  %%
- 2. *Storage case*
+ 2. *Production Drawers*
 This is a short, wheeled black case that contains storage drawers for key A/V equipment. It contains many key cables and smaller items for AV setup. 
 ![[FRC/FRC-AV/Track 1/Media/PXL_20251117_193737105.MP.webp]]
 3.  *A/V Totes*
@@ -68,7 +68,9 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 - [[FRC/FRC-AV/Track 6/6a. Set up Mesh AP|6a. Set up Mesh AP]]
 # Reference Materials
 These guides have been written to aid AV operations efforts during the event.
-- [[FRC/FRC-AV/Sound Board Operators' Guide|Sound Board Operators' Guide]]
 - [[Pit Stick Guide]]
+- [[SDI Cable Repair Guide]]
+- [[FRC/FRC-AV/Sound Board Operators' Guide|Sound Board Operators' Guide]]
+
 %%## Striking and Teardown
  - Locations for Teardown%%

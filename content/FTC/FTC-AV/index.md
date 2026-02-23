@@ -6,7 +6,7 @@ This series of articles is intended to walk an event volunteer through setting u
 All A/V equipment will be located in one of the following locations, and it all must go **back** into one of these locations at the conclusion of the event. It is important to keep the equipment organized. The equipment should be placed back in the locations where you found it unless the Equipment Manager or FTA states otherwise. Here is a list of all of the locations where our A/V equipment can be found:
 1.  *Streaming Unit case*
 This is also known as the "Webstream Unit", "Streaming Unit", or other similar names. It is a large, tall black case on wheels labeled as the "streaming unit". It contains the main streaming computer, audio mixer, and interface panels to connect other equipment to. You can see the open streaming unit below.![[FTC/FTC-AV/Track 1/Media/PXL_20251117_193907475.webp]]
- 2. *Storage case*
+ 2. *Production Drawers*
 This is a short, wheeled black case that contains storage drawers for key A/V equipment. It contains many key cables and smaller items for AV setup. 
 ![[FTC/FTC-AV/Track 1/Media/PXL_20251117_193737105.MP.webp]]
 3.  *A/V Totes*
