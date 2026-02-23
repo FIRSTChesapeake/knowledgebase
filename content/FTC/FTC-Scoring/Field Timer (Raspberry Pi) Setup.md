@@ -12,7 +12,7 @@ This article will describe how to set up the *FIRST* Chesapeake display Raspberr
 7. Each monitor receives a Raspberry Pi through HDMI connection.  HDMI cables are located in the scorekeeper road case.
 8. Power the raspberry pi with the USB A to micro USB cable in the scorekeeper road case to the same power strip as the monitor.
 9.  Using an appropriate length of Ethernet cable, connect the scorekeeper laptop to one of the Ethernet ports labeled with "LAN" on the Streaming Unit.
-	 Scorekeepers may want an Ethernet switch on the scoring table to connect additional devices. If this is desired, obtain an Ethernet switch from the Equipment Manager (located in the [[FRC/FRC-AV/index#Equipment Locations and Storage Descriptions|AV storage case]]'s bottommost drawer) and connect the Ethernet cable to any port of the switch instead of directly to the laptop. Use a short cable to connect another port of the switch to the scorekeeper laptop.
+	 Scorekeepers may want an Ethernet switch on the scoring table to connect additional devices. If this is desired, obtain an Ethernet switch from the Equipment Manager (located in the [[FRC/FRC-AV/index#Equipment Locations and Storage Descriptions|AV Production Drawers]]'s bottommost drawer) and connect the Ethernet cable to any port of the switch instead of directly to the laptop. Use a short cable to connect another port of the switch to the scorekeeper laptop.
 10. Using an appropriate length of Ethernet cable, connect the Ethernet cables from each Raspberry Pi back to the two remaining Ethernet ports labeled "LAN" on the Streaming Unit.
  %% TODO: Get a picture of the Streaming Unit and the LAN ports.%%
 
