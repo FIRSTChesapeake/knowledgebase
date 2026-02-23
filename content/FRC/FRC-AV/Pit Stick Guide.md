@@ -11,7 +11,8 @@ To connect pit sticks:
 4. The stick will boot to a blank desktop. The script is configured to wait until the Internet is reachable, and then to attempt to reach the FMS rankings page through the local access or remote access methods (preferring local, if available). Once an Internet connection is established, it takes about 60 seconds to launch the web browser window. 
 # Troubleshooting
 
-A wireless keyboard/mouse combination is provided in the [[FRC/FRC-AV/index#Equipment Locations and Storage Descriptions|Production Drawers]]. It contains two Bluetooth device slots, which have been pre-paired to each of the Pit Sticks. There is also a USB RF dongle, located on the back of the keyboard, inside the battery door. This dongle is useful for use with other devices, or for accessing a keyboard interface if the Bluetooth connection fails. Select the device that the keyboard transmits to by using one of the three buttons above the touchpad. Grab this keyboard to help interface with the pit sticks before continuing. ![[IMG_20260214_145028-1.jpg]] 
+A wireless keyboard/mouse combination is provided in the [[FRC/FRC-AV/index#Equipment Locations and Storage Descriptions|Production Drawers]]. It contains two Bluetooth device slots, which have been pre-paired to each of the Pit Sticks. There is also a USB RF dongle, located on the back of the keyboard, inside the battery door. This dongle is useful for use with other devices, or for accessing a keyboard interface if the Bluetooth connection fails. Select the device that the keyboard transmits to by using one of the three buttons above the touchpad. Grab this keyboard to help interface with the pit sticks before continuing. 
+![[IMG_20260214_145028-1.webp]] 
 
 **No Display/Signal**
 Note that the screen should show a mostly-blank background and a taskbar menu when idle. If this is the case, reference the next section.
@@ -20,7 +21,7 @@ Note that the screen should show a mostly-blank background and a taskbar menu wh
 - If the incorrect input was selected, restart the PC if there is still nothing displayed on the screen. 
 **No Browser Window**
 If the screen shows a black background like the one shown below, the system does not have Internet connectivity and the script is waiting for this to be achieved.
-![[WIN_20260213_00_03_02_Pro.jpg]]
+![[WIN_20260213_00_03_02_Pro.webp]]
 - Check the taskbar to see if the Pit Stick has Wi-Fi connectivity. As shown above, there is no connection, so the browser window will never open. 
   ![[no-network.png]]
   The icon should look something like this to indicate active Wi-Fi connection:![[network.jpg]]
