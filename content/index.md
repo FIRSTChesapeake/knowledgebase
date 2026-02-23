@@ -14,8 +14,9 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.3.0
-> Changes from v26.2.0:
-> - Added a video operators' guide.
-> - Added clarifications on FTC dual-division event setup for audio.
+> [!summary] Knowledgebase version 26.4.0
+> Changes from v26.3.0:
+> - Editorial updates to sync FTC and FRC A/V setup articles. Backported FRC-relevant changes from FTC.
+> - Added a [[Pit Stick Guide|setup and usage article for pit display stick PCs]].
+> - Added an [[SDI Cable Repair Guide]].
 

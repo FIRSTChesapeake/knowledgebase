@@ -1,6 +1,3 @@
-# Contents
-[[#Setup and Usage]]
-
 # Setup and Usage
 Pit Sticks are preconfigured to a particular route. This can be changed later. The label on the stick indicates the preconfigured route with N for north and S for south.
 
