@@ -45,7 +45,8 @@ This app is used to adjust the projector image to the screen. This application i
 This app is used to remotely operate the audio mixer. You can perform the majority of operations on the mixer from this app, including volume and other parameter control. 
 
 > [!important] Getting the Fader Layout Onto the iPad
-> By default, the custom fader banks are not imported from the mixer to the app when connecting. You will need to select "Custom1" on the first screen of the app to sync them. ![[dm3-sm-select.webp]]
+> By default, the custom fader banks are not imported from the mixer to the app when connecting. You will need to select "Custom1" on the first screen of the app to sync them.
+>  ![[dm3-sm-select.webp]]
 > Once connected, tap the button at the top to toggle between default and custom order.
 > ![[dm3-sm-fader-bank-select.png]]
 ## OBS Blade (iPad)

@@ -52,7 +52,14 @@ When determining audio levels, some sounds take precedence over others. At event
 2. Emcee and commentator microphones
 3. Music
 You should ensure that the relative volume of each sound source allows these priorities to shine though. The sound board helps you with this through the use of a dynamic volume adjuster. The sound from the music inputs is programmed to duck, or temporarily reduce volume, when any sound from game sounds or emcee and commentator mics reaches over a certain threshold. This is an intentional event sound design choice should not be altered or disabled by the sound board operator.
+### DM3 StageMix (iPad app)
+You can remotely operate the audio mixer using the DM3 StageMix iPad app on the A/V iPad. You can perform the majority of operations on the mixer from this app, including volume and other parameter control. 
 
+> [!important] Getting the Fader Layout Onto the iPad
+> By default, the custom fader banks are not imported from the mixer to the app when connecting. You will need to select "Custom1" on the first screen of the app to sync them.
+>  ![[dm3-sm-select.webp]]
+> Once connected, tap the button at the top to toggle between default and custom order.
+> ![[dm3-sm-fader-bank-select.png]]
 
 ### Soundboard Manual
 The manufacturer's manuals for the soundboard can be found here:
