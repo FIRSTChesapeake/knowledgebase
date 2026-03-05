@@ -11,7 +11,7 @@ Product page including instruction manuals for the spider boxes can be found [he
 
 1. Determine the location necessary for the Spider Boxes. Each spider box has six outlets, each of which powers up to three pits using the tri-tap extension cords (max. 18 pits per spider box). There is a limited quantity of spider boxes, so the pit layout needs to accommodate this constraint.
 2. Place spider boxes at necessary locations. When doing this, visualize cable paths back to the distribution box or venue power drop(s). Ensure as few walkways or robot pathways are crossed as possible.
-The following steps can be completed in parallel, or in any order as all key elements to power distribution have been set at this point.
+The following steps can be completed in parallel, or in any order as all key components to power distribution have been placed at this point. This is a great task to have pit setup folks help with, when they are finished with taping the pits.
 - Run twist-lock cables from the distribution box or venue power drop(s) to each spider box. When attaching the cables to each other, or to distribution boxes, be sure to twist the cable fully clockwise to ensure the best contact. The spider boxes can be daisy chained together, if this suits the venue layout best.
 
 > [!check] Ideal Setup for Feeding Spider Boxes
