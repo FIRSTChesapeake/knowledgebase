@@ -14,10 +14,14 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.4.0 (updated 3/5/26)
+> [!summary] Knowledgebase version 26.4.1 (updated 3/5/26)
+> Changes from v26.4.0:
+> - Fixed syntax issues causing improper rendering of collapsible step boxes.
+> 
 > Changes from v26.3.0:
 > - Added articles for FRC [[FRC/FRC-Power/index|Pit Power]].
 > - General editorial pass on all FRC articles (to fix image dimensions, make editorial fixes, etc.)
+> 
 > Changes from v26.2.0:
 > - Added a [[FTC/FTC-AV/Video Operator's Guide|Video Operator's Guide]] for FTC (will be updated for FRC soon).
 > - Added clarifications on FTC dual-division event setup for audio.
