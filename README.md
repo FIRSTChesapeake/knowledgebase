@@ -6,6 +6,7 @@ Welcome to the Chesapeake Knowledgebase repository. This repository is intended 
 The goal of this Knowledgebase is to provide relatively 'evergreen' documentation that does not change from year to year. Game-specific documentation should not be included unless it substantially changes the setup instructions.
 
 
+
 Current scope:
 - FRC
 	- Audio/Visual (A/V) setup instructions
