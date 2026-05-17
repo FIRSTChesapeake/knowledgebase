@@ -60,7 +60,7 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 
 ## Track 4 (Screen and Projector Setup)
 - [[FRC/FRC-AV/Track 4/4a. Unpack and Assemble Screen|4a. Unpack and Assemble Screen]]
-- [[FRC/FRC-AV/Track 4/4b. Unpack and Setup Projector|4b. Unpack and Setup Projector]]]]
+- [[FRC/FRC-AV/Track 4/4b. Unpack and Setup Projector|4b. Unpack and Setup Projector]]
 ## Track 5 (Finishing Touches)
 - [[FRC/FRC-AV/Track 5/5a. Setup Audience Display|5a. Setup Audience Display]]
 - [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]]
