@@ -14,7 +14,11 @@ Select the program whose knowledgebase you would like to see:
 ****
 
 
-> [!summary] Knowledgebase version 26.4.1 (updated 3/5/26)
+> [!summary] Knowledgebase version 26.5.0 (updated 5/18/26)
+> Changes from v26.4.1:
+> - Added information on wireless mic frequency conflicts (how to detect & fix) to stage 2b instructions.
+> - Added links to public *FIRST* Chesapeake event resources to both A/V home pages.
+> 
 > Changes from v26.4.0:
 > - Fixed syntax issues causing improper rendering of collapsible step boxes.
 > 
@@ -22,10 +26,4 @@ Select the program whose knowledgebase you would like to see:
 > - Added articles for FRC [[FRC/FRC-Power/index|Pit Power]].
 > - General editorial pass on all FRC articles (to fix image dimensions, make editorial fixes, etc.)
 > 
-> Changes from v26.2.0:
-> - Added a [[FTC/FTC-AV/Video Operator's Guide|Video Operator's Guide]] for FTC (will be updated for FRC soon).
-> - Added clarifications on FTC dual-division event setup for audio.
-> - Backported FRC-relevant changes from FTC A/V notes.
-> - Added an [[SDI Cable Repair Guide]].
-> - Added a [[Pit Stick Guide]] on the usage and troubleshooting of FRC Pit Display stick PCs.
 
