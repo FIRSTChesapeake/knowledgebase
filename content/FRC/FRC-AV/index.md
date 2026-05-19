@@ -1,6 +1,16 @@
 ---
 title: FRC A/V Home
 ---
+# Table of Contents
+[[#Equipment Locations and Storage Descriptions]]
+[[#Stages and Order of Setup]]
+	[[#Track 0 (Gathering Materials)]]
+	[[#Track 1 (Core Streaming Unit & Network Setup)]]
+	[[#Track 2 (Audio Setup)]]
+	[[#Track 3 (Camera Setup)]]
+	[[#Track 4 (Screen and Projector Setup)]]
+	[[#Track 5 (Finishing Touches)]]
+[[#Reference Materials]]
 This series of articles is intended to walk an event volunteer through setting up the audio/visual system for *FIRST* Chesapeake FRC events. We will walk step-by-step through the items, actions and connections necessary for successful AV setup. This is the "hub" article, off of which each distinct setup stage (described in the [[#Stages and Order of Setup]] section below) will branch. You can return here at any time. First, however, we must discuss where to find all of the items you will need to setup A/V.
 # Equipment Locations and Storage Descriptions
 All A/V equipment will be located in one of the following locations, and it all must go **back** into one of these locations at the conclusion of the event. It is important to keep the equipment organized. The equipment should be placed back in the locations where you found it unless the Equipment Manager or FTA states otherwise. Here is a list of all of the locations where our A/V equipment can be found:
@@ -64,13 +74,15 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 ## Track 5 (Finishing Touches)
 - [[FRC/FRC-AV/Track 5/5a. Setup Audience Display|5a. Setup Audience Display]]
 - [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]]
-## Track 6 (Venue-Dependent Items)
-- [[FRC/FRC-AV/Track 6/6a. Set up Mesh AP|6a. Set up Mesh AP]]
+- [[FRC/FRC-AV/Track 5/5c. Set up Mesh AP|5c. Set up Mesh AP]]
 # Reference Materials
 These guides have been written to aid AV operations efforts during the event.
 - [[Pit Stick Guide]]
 - [[SDI Cable Repair Guide]]
 - [[FRC/FRC-AV/Sound Board Operators' Guide|Sound Board Operators' Guide]]
+- [FRC Equipment Packing List](https://docs.google.com/spreadsheets/d/1A0Va6u0mF91-yCFy_oz1SJRP8QRewxgazLoZTGtLOTQ/view)
+- [FRC Production Plan](https://docs.google.com/spreadsheets/d/1YgkAaJ3fXwL9FFOt2qJrG05Sel0wguSxqcxeWG_ErTI/view)
+- [FRC POD Packing Diagram](https://docs.google.com/document/d/1lJ1QmIHb_LYRBws9vPr8-eibluJqp6ipUB9PxeUjJuE/view)
 
 %%## Striking and Teardown
  - Locations for Teardown%%

@@ -1,6 +1,18 @@
 ---
 title: FTC A/V Home
 ---
+# Table of Contents
+[[#Equipment Locations and Storage Descriptions]]
+[[#Stages and Order of Setup]]
+	[[#Track 0 (Gathering Materials)]]
+	[[#Track 1 (Core Streaming Unit & Network Setup)]]
+	[[#Track 2 (Audio Setup)]]
+	[[#Track 3 (Camera Setup)]]
+	[[#Track 4 (Screen and Projector Setup)]]
+	[[#Track 5 (Finishing Touches)]]
+	[[#Track 6 (Venue-Dependent Items)]]
+[[#Reference Materials]]
+
 This series of articles is intended to walk an event volunteer through setting up the audio/visual system for *FIRST* Chesapeake FTC events. We will walk step-by-step through the items, actions and connections necessary for successful AV setup. This is the "hub" article, off of which each distinct setup stage (described in the [[#Stages and Order of Setup]] section below) will branch. You can return here at any time. First, however, we must discuss where to find all of the items you will need to setup A/V.
 # Equipment Locations and Storage Descriptions
 All A/V equipment will be located in one of the following locations, and it all must go **back** into one of these locations at the conclusion of the event. It is important to keep the equipment organized. The equipment should be placed back in the locations where you found it unless the Equipment Manager or FTA states otherwise. Here is a list of all of the locations where our A/V equipment can be found:
@@ -54,11 +66,11 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 ## Track 5 (Finishing Touches)
 - [[FTC/FTC-AV/Track 5/5a. Setup Audience Display|5a. Setup Audience Display]]
 - [[FTC/FTC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]] (see also [[FTC/FTC-AV/Video Operator's Guide]])
-## Track 6 (Venue-Dependent Items)
-- [[FTC/FTC-AV/Track 6/6a. Set up Mesh AP|Set Up Mesh AP]]
+- [[FTC/FTC-AV/Track 5/5c. Set up Mesh AP]]
 # Reference Materials
 These guides have been written to aid AV operations efforts during the event.
 - [[Sound Board Operator's Guide|Sound Board Operator's Guide]]
-- [[FTC/FTC-AV/Video Operator's Guide]]
-%%## Striking and Teardown
- - Locations for Teardown%%
+- [[FTC/FTC-AV/Video Operator's Guide|Video Operator's Guide]]
+- [FTC Equipment Packing List](https://docs.google.com/spreadsheets/d/1KeN0IdBgaDH8KwSUVTPax9ITeMoZSdkOgNDJM-xwGPk/view)
+- [FTC Production Plan](https://docs.google.com/spreadsheets/d/1H9zmcIzH2KDKKnp3ywGcnSBjOtlIUzowjSXGwrWxzG0/view)
+- FTC POD Packing Diagram (coming soon!)
