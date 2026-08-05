@@ -32,9 +32,6 @@ export default {
     readerMode: {
       title: "Chế độ đọc",
     },
-    readerMode: {
-      title: "Chế độ đọc",
-    },
     explorer: {
       title: "Nội dung",
     },
