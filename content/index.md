@@ -10,11 +10,18 @@ Select the program whose knowledgebase you would like to see:
 # [[FTC/index|FTC]]
 # [[FRC/index|FRC]]
 
+Also available:
+# [[Event-Streaming-Management/index|Event Streaming Management]]
+Documentation for the platform that turns event livestreams into published match clips.
+
 
 ****
 
 
-> [!summary] Knowledgebase version 26.5.0 (updated 5/18/26)
+> [!summary] Knowledgebase version 26.6.0 (updated 9/17/26)
+> Changes from v26.5.0:
+> - Added the Event Streaming Management section, covering event operators, client administration, and system administration for the event streaming/clipping platform.
+> 
 > Changes from v26.4.1:
 > - Added information on wireless mic frequency conflicts (how to detect & fix) to stage 2b instructions.
 > - Added links to public *FIRST* Chesapeake event resources to both A/V home pages.
