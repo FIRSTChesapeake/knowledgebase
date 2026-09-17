@@ -12,11 +12,12 @@ defaults. If you're looking for day-of-event operation instead, see
 # Guides in This Section
 
 1. [[Event-Streaming-Management/Client-Administration/1. Members and Roles|Members and Roles]] —
-   what a Client is, the three member roles, and inviting people.
-2. [[Event-Streaming-Management/Client-Administration/2. Stream Keys and Restream Keys|Stream Keys and Restream Keys]] — the credentials operators and OBS use.
+   what a Client is, the three member roles, exactly what each can do, and inviting people.
+2. [[Event-Streaming-Management/Client-Administration/2. Stream Keys and Restream Keys|Stream Keys and Restream Keys]] — viewing/revealing stream keys, and creating, rotating, and
+   deleting restream keys.
 3. [[Event-Streaming-Management/Client-Administration/3. YouTube and Slack Integrations|YouTube and Slack Integrations]] — connecting your YouTube channel and Slack workspace.
-4. [[Event-Streaming-Management/Client-Administration/4. Branding|Branding]] — pre-roll and
-   post-roll videos on published clips.
+4. [[Event-Streaming-Management/Client-Administration/4. Branding|Branding]] — your Client's name,
+   logo, and colors in the dashboard sidebar (not clip pre/post-roll — that's system-admin-managed).
 5. [[Event-Streaming-Management/Client-Administration/5. OBS Plugin Devices|OBS Plugin Devices]] —
    approving and revoking operator devices.
 6. [[Event-Streaming-Management/Client-Administration/6. Event Configuration Reference|Event Configuration Reference]] — a field-by-field reference for event setup.
