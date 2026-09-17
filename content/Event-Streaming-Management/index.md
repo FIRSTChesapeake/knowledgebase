@@ -37,6 +37,9 @@ Pick the guide that matches what you're doing:
   install, configure, or operate the platform itself: Kubernetes deployment, secrets, system-wide
   settings, and troubleshooting.
 
+Also see [[Event-Streaming-Management/FAQ and Glossary|FAQ and Glossary]] for terms and quick
+answers that come up across all three guides.
+
 # Before You Start
 
 You'll need a stream to send this platform in the first place. If you haven't set up the A/V

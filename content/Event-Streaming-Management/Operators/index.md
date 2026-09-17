@@ -23,6 +23,8 @@ after an event. If you're looking for the OBS/hardware setup instead, see
    — reviewing what gets published and running signage displays.
 6. [[Event-Streaming-Management/Operators/6. Troubleshooting|Troubleshooting]] — common warnings
    and what to do about them.
+7. [[Event-Streaming-Management/Operators/7. Your First Event|Your First Event]] — a day-before/
+   morning-of/during/after checklist for your first time running an event.
 
 # Typical Event Workflow
 
@@ -39,3 +41,7 @@ after an event. If you're looking for the OBS/hardware setup instead, see
 >    publish clips automatically.
 > 5. After the event, spot-check the Clips and Uploads pages (see
 >    [[Event-Streaming-Management/Operators/5. Clips, Uploads and Signage|Clips, Uploads and Signage]]).
+>
+> First time doing this? See
+> [[Event-Streaming-Management/Operators/7. Your First Event|Your First Event]] for the full
+> checklist version.
