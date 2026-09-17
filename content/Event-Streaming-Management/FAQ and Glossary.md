@@ -18,10 +18,12 @@ longer explanation elsewhere, this page links to it rather than repeating it.
   Admin can configure and manage; User can operate day-to-day controls; Readonly can view but not
   act. See [[Event-Streaming-Management/Client-Administration/1. Members and Roles|Members and Roles]].
 - **Stream key** — the credential your encoder (OBS, directly or through the plugin) uses to send
-  video into the platform for a given event. See
+  video into the platform for a given event. Only a system admin can create, change, or delete a
+  stream key; a Client Admin can view and reveal one but not generate a new one. See
   [[Event-Streaming-Management/Client-Administration/2. Stream Keys and Restream Keys|Stream Keys and Restream Keys]].
-- **Restream key** — a separate credential used for the manual-restream-target path, distinct from
-  the stream key used for ingest. See
+- **Restream key** — a separate credential (your destination's own RTMP key, e.g. YouTube's) used
+  for the manual-restream-target path, distinct from the stream key used for ingest. Unlike stream
+  keys, a Client Admin can create and delete these themselves. See
   [[Event-Streaming-Management/Client-Administration/2. Stream Keys and Restream Keys|Stream Keys and Restream Keys]].
 - **Push vs. broadcast** — "pushing" is sending your already-ingested stream onward toward YouTube
   (the **Start Push** / **Stop Push** controls); "broadcast" is the YouTube Live broadcast itself
