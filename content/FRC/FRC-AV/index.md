@@ -74,6 +74,10 @@ Each of the five pieces of Equipment Storage described above should be moved to 
 ## Track 5 (Finishing Touches)
 - [[FRC/FRC-AV/Track 5/5a. Setup Audience Display|5a. Setup Audience Display]]
 - [[FRC/FRC-AV/Track 5/5b. Finish OBS Setup|5b. Finish OBS Setup]]
+
+> [!info] Splitting, Clipping and Publishing Matches
+> Once your OBS stream is live, see [[Event-Streaming-Management/index|Event Streaming Management]]
+> for turning that stream into published per-match clips.
 - [[FRC/FRC-AV/Track 5/5c. Set up Mesh AP|5c. Set up Mesh AP]]
 # Reference Materials
 These guides have been written to aid AV operations efforts during the event.
