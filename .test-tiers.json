@@ -1,0 +1,12 @@
+{
+  "format": "test-tiers/v1",
+  "$comment": "Read by an external, project-agnostic tier runner -- not owned by this repo. One tier: light mirrors the deploy workflow's build step (npm ci, then a full quartz build), which is the only check that catches a broken page, a bad wikilink target or a malformed frontmatter block before it reaches the published site. No services, no browser. The full (non-slim) node image is required: the quartz CLI shells out to git at import time and crashes when the binary is missing.",
+  "tiers": {
+    "light": {
+      "workdir": "",
+      "image": "node:22-bookworm",
+      "memory": "1536m",
+      "run": "npm ci --no-audit --no-fund && npx quartz build"
+    }
+  }
+}
