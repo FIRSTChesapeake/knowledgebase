@@ -35,15 +35,15 @@ longer explanation elsewhere, this page links to it rather than repeating it.
   [[Event-Streaming-Management/Operators/2. Managing Events|Managing Events]].
 - **Operation mode** — a system-wide setting (`record_only`, `lite_mode`, or `full_power`) that
   gates how much of the pipeline runs platform-wide. See
-  [[Event-Streaming-Management/System-Administration/4. System Settings Reference|System Settings Reference]].
+  [[Event-Streaming-Management/System-Administration/2. System Settings Reference|System Settings Reference]].
 - **Test event** — a synthetic event with fake matches that a system admin can create to rehearse
   the full pipeline (a real stream still has to be sent in) without touching real event data. Only
   system admins can create or configure test events. See
-  [[Event-Streaming-Management/System-Administration/7. System Admins and Test Mode|System Admins and Test Mode]].
+  [[Event-Streaming-Management/System-Administration/4. System Admins and Test Mode|System Admins and Test Mode]].
 - **OBS Test Clock** — an unauthenticated browser-source URL a system admin can hand to any
   operator to sanity-check their OBS video/audio pipeline before a stream, without needing a test
   event. See
-  [[Event-Streaming-Management/System-Administration/7. System Admins and Test Mode|System Admins and Test Mode]].
+  [[Event-Streaming-Management/System-Administration/4. System Admins and Test Mode|System Admins and Test Mode]].
 - **Signage** — physical or web-based displays (pit, queueing, audience, wait-time, or a custom
   URL) that the platform can drive on a per-event basis. See
   [[Event-Streaming-Management/Operators/5. Clips, Uploads and Signage#Signage|Clips, Uploads and Signage]].
@@ -63,6 +63,6 @@ longer explanation elsewhere, this page links to it rather than repeating it.
 
 > [!question]- My upload/stream/event isn't doing what I expect, and this page didn't cover it.
 > Start with [[Event-Streaming-Management/Operators/6. Troubleshooting|Troubleshooting]] (or the
-> System Administration [[Event-Streaming-Management/System-Administration/6. Monitoring and Troubleshooting|Monitoring and Troubleshooting]] page if you're a system admin), then contact *FIRST*
+> System Administration [[Event-Streaming-Management/System-Administration/3. Monitoring and Troubleshooting|Monitoring and Troubleshooting]] page if you're a system admin), then contact *FIRST*
 > Chesapeake technology support at
 > [technology@firstchesapeake.org](mailto:technology@firstchesapeake.org).
