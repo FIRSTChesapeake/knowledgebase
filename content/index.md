@@ -18,7 +18,13 @@ Documentation for the platform that turns event livestreams into published match
 ****
 
 
-> [!summary] Knowledgebase version 26.6.0 (updated 9/17/26)
+> [!summary] Knowledgebase version 26.7.0 (updated 9/24/26)
+> Changes from v26.6.0:
+> - Updated the Event Streaming Management manual: a Copy button for stream keys, what to do when a clip is held and retries, how to rotate a key, upload size limits, confirming a drift, client test events, and a fix for choosing the right YouTube channel.
+> - Applied security and maintenance updates to the tools that build this site.
+> - Hardened how page settings are read, to block unsafe page headers.
+> - Site updates are now published by version tag; the README explains how.
+> 
 > Changes from v26.5.0:
 > - Added the Event Streaming Management section, covering event operators, client administration, and system administration for the event streaming/clipping platform.
 > 
