@@ -52,6 +52,27 @@ function getAliasSlugs(aliases: string[]): FullSlug[] {
   return res
 }
 
+const allowedFrontmatterLanguages = new Set(["yaml", "yml", "toml", "json"])
+
+// Mirrors how gray-matter picks the fence language (BOM stripped, text after the
+// opening delimiter up to the end of the line, trimmed; the configured language
+// when that is empty) so the two cannot disagree about which engine will run.
+function assertAllowedFrontmatterLanguage(
+  fileData: Buffer,
+  matterOpts: Pick<Options, "delimiters" | "language">,
+) {
+  const content = fileData.toString().replace(/^\uFEFF/, "")
+  const { delimiters } = matterOpts
+  const open = Array.isArray(delimiters) ? delimiters[0] : delimiters
+  if (!content.startsWith(open) || content.charAt(open.length) === open.slice(-1)) return
+
+  const fence = matter.language(content.slice(open.length), { delimiters }).name
+  const language = (fence || matterOpts.language || "yaml").toLowerCase()
+  if (!allowedFrontmatterLanguages.has(language)) {
+    throw new Error("Unsupported frontmatter language: only yaml, toml and json are allowed")
+  }
+}
+
 export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts) => {
   const opts = { ...defaultOptions, ...userOpts }
   return {
@@ -65,14 +86,20 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
             const fileData = Buffer.from(file.value as Uint8Array)
             // gray-matter ships a default `javascript` engine (aliased from `js`) that
             // eval()s the frontmatter body, so a file opening with `---js` would run
-            // arbitrary code during the build. Overriding it here keeps yaml and toml
-            // as the only engines that can parse; these keys take precedence over any
-            // engines or parsers passed in through the plugin options.
+            // arbitrary code during the build. Only yaml, toml and json (JSON.parse)
+            // may parse: the fence language is checked against an allowlist first,
+            // and gray-matter gets a fixed engine table rather than the plugin
+            // options, so no engine or parser can be added through them. The
+            // throwing javascript/js engines stay as a second layer.
+            const matterOpts = { delimiters: opts.delimiters, language: opts.language }
+            assertAllowedFrontmatterLanguage(fileData, matterOpts)
             const { data } = matter(fileData, {
-              ...opts,
+              ...matterOpts,
               engines: {
                 yaml: (s) => yaml.load(s, { schema: yaml.JSON_SCHEMA }) as object,
+                yml: (s) => yaml.load(s, { schema: yaml.JSON_SCHEMA }) as object,
                 toml: (s) => toml.parse(s) as object,
+                json: (s) => JSON.parse(s),
                 javascript: () => {
                   throw new Error("JavaScript frontmatter is not supported")
                 },
