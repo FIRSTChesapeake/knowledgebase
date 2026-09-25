@@ -104,10 +104,22 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
               allSlugs.push(data.permalink)
             }
 
+            for (const field of ["description", "socialDescription", "lang"]) {
+              if (data[field] === undefined) continue
+              const value = scalarToString(data[field])
+              if (value === undefined) {
+                delete data[field]
+              } else {
+                data[field] = value
+              }
+            }
+
             const cssclasses = coerceToArray(coalesceAliases(data, ["cssclasses", "cssclass"]))
             if (cssclasses) data.cssclasses = cssclasses
 
-            const socialImage = coalesceAliases(data, ["socialImage", "image", "cover"])
+            const socialImage = scalarToString(
+              coalesceAliases(data, ["socialImage", "image", "cover"]),
+            )
 
             const created = coalesceAliases(data, ["created", "date"])
             if (created) {
@@ -126,7 +138,11 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
             const published = coalesceAliases(data, ["published", "publishDate", "date"])
             if (published) data.published = published
 
-            if (socialImage) data.socialImage = socialImage
+            if (socialImage) {
+              data.socialImage = socialImage
+            } else {
+              delete data.socialImage
+            }
 
             // Remove duplicate slugs
             const uniqueSlugs = [...new Set(allSlugs)]

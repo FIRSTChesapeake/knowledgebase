@@ -4,8 +4,12 @@ import { unified } from "unified"
 import remarkParse from "remark-parse"
 import { VFile } from "vfile"
 import { FrontMatter } from "./frontmatter"
-import { coerceDate } from "./lastmod"
+import fs from "fs"
+import os from "os"
+import path from "path"
+import { coerceDate, CreatedModifiedDate } from "./lastmod"
 import { BuildCtx } from "../../util/ctx"
+import { FilePath } from "../../util/path"
 
 async function parse(md: string, stem = "note") {
   const ctx = { cfg: { configuration: { locale: "en-US" } }, allSlugs: [] } as unknown as BuildCtx
@@ -64,6 +68,72 @@ describe("toml frontmatter", () => {
     const before = Date.now()
     const dt = coerceDate("note.md", fm.created)
     assert(dt.getTime() >= before)
+  })
+
+  test("tables inside a tags array are dropped", async () => {
+    const fm = await parse('---toml\ntags = [{ a = 1 }, "x"]\n---\n')
+    assert.deepStrictEqual(fm.tags, ["x"])
+  })
+
+  test("table-valued aliases and cssclasses do not throw", async () => {
+    const fm = await parse("---toml\naliases = {}\ncssclasses = {}\n---\n")
+    assert.deepStrictEqual(fm.aliases, [])
+    assert.deepStrictEqual(fm.cssclasses, [])
+  })
+
+  test("table-valued socialDescription is removed", async () => {
+    const fm = await parse("---toml\nsocialDescription = { a = 1 }\n---\n")
+    assert.strictEqual(fm.socialDescription, undefined)
+  })
+
+  test("table-valued lang is removed", async () => {
+    const fm = await parse("---toml\nlang = { a = 1 }\n---\n")
+    assert.strictEqual(fm.lang, undefined)
+  })
+
+  for (const field of ["socialImage", "image", "cover"]) {
+    test(`table-valued ${field} does not become socialImage`, async () => {
+      const fm = await parse(`---toml\n${field} = { a = 1 }\n---\n`)
+      assert.strictEqual(fm.socialImage, undefined)
+    })
+  }
+
+  test("table-valued description is removed", async () => {
+    const fm = await parse("---toml\ndescription = { a = 1 }\n---\n")
+    assert.strictEqual(fm.description, undefined)
+  })
+
+  test("string description, socialDescription, lang and image are kept", async () => {
+    const fm = await parse(
+      '---toml\ndescription = "d"\nsocialDescription = "s"\nlang = "de"\nimage = "a.png"\n---\n',
+    )
+    assert.strictEqual(fm.description, "d")
+    assert.strictEqual(fm.socialDescription, "s")
+    assert.strictEqual(fm.lang, "de")
+    assert.strictEqual(fm.socialImage, "a.png")
+  })
+
+  test("table-valued date falls back to the filesystem", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lastmod-"))
+    const fp = path.join(dir, "note.md")
+    fs.writeFileSync(fp, "---toml\nmodified = { y = 1 }\n---\n")
+    const mtime = new Date("2020-05-06T07:08:09Z")
+    fs.utimesSync(fp, mtime, mtime)
+    try {
+      const file = new VFile({ value: fs.readFileSync(fp), path: fp })
+      file.data.frontmatter = { title: "note", modified: { y: 1 } as unknown as string }
+      file.data.filePath = fp as FilePath
+      file.data.relativePath = "note.md" as FilePath
+      const ctx = { argv: { directory: dir } } as unknown as BuildCtx
+      const plugins = CreatedModifiedDate({ priority: ["frontmatter", "filesystem"] })
+      const [attach] = plugins.markdownPlugins!(ctx) as unknown as [
+        () => (tree: unknown, file: VFile) => Promise<void>,
+      ]
+      await attach()(undefined, file)
+      assert.strictEqual(file.data.dates!.modified.getTime(), mtime.getTime())
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test("invalid toml throws", async () => {
