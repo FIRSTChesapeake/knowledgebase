@@ -89,6 +89,24 @@ describe("frontmatter engines", () => {
     assert.strictEqual(g.__pwned, undefined)
   })
 
+  for (const delimiters of [undefined, null]) {
+    test(`delimiters: ${delimiters} falls back to --- for the check too`, async () => {
+      await assertRejectedWithoutEval(`---constructor\ntitle: x\n---\nbody\n`, unsupported, {
+        delimiters,
+      })
+      const data = await parse("---\ntitle: Hello YAML\n---\nbody\n", { delimiters })
+      assert.strictEqual(data.title, "Hello YAML")
+    })
+  }
+
+  test("custom delimiters are checked with the same allowlist", async () => {
+    await assertRejectedWithoutEval(`+++js\n${payload}\n+++\nbody\n`, rejected, {
+      delimiters: "+++",
+    })
+    const data = await parse('+++toml\ntitle = "Hello TOML"\n+++\nbody\n', { delimiters: "+++" })
+    assert.strictEqual(data.title, "Hello TOML")
+  })
+
   test("parses yaml frontmatter", async () => {
     const data = await parse("---\ntitle: Hello YAML\n---\nbody\n")
     assert.strictEqual(data.title, "Hello YAML")

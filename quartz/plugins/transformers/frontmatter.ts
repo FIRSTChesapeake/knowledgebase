@@ -64,10 +64,13 @@ function assertAllowedFrontmatterLanguage(
   const content = fileData.toString().replace(/^\uFEFF/, "")
   const { delimiters } = matterOpts
   const open = Array.isArray(delimiters) ? delimiters[0] : delimiters
+  if (typeof open !== "string" || open === "") {
+    throw new Error("Unsupported frontmatter delimiters: a non-empty string is required")
+  }
   if (!content.startsWith(open) || content.charAt(open.length) === open.slice(-1)) return
 
   const fence = matter.language(content.slice(open.length), { delimiters }).name
-  const language = (fence || matterOpts.language || "yaml").toLowerCase()
+  const language = (fence || matterOpts.language).toLowerCase()
   if (!allowedFrontmatterLanguages.has(language)) {
     throw new Error("Unsupported frontmatter language: only yaml, toml and json are allowed")
   }
@@ -91,7 +94,12 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
             // and gray-matter gets a fixed engine table rather than the plugin
             // options, so no engine or parser can be added through them. The
             // throwing javascript/js engines stay as a second layer.
-            const matterOpts = { delimiters: opts.delimiters, language: opts.language }
+            // Defaults are applied here, the way gray-matter would apply them, so the
+            // check and the parser always see the same delimiters and language.
+            const matterOpts = {
+              delimiters: opts.delimiters || "---",
+              language: opts.language || "yaml",
+            }
             assertAllowedFrontmatterLanguage(fileData, matterOpts)
             const { data } = matter(fileData, {
               ...matterOpts,
