@@ -1,9 +1,12 @@
 name: Deploy Quartz site to GitHub Pages
  
+# Publishing is tag-driven: merging to main changes nothing on the live site
+# until a version tag (vX.Y.Z) is pushed. workflow_dispatch allows a manual
+# re-publish; either way, only a commit already on main may deploy.
 on:
   push:
-    branches:
-      - main
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+  workflow_dispatch:
 
  
 permissions:
@@ -22,6 +25,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetch all history for git info
+      # Only commits already merged to main may deploy, whether by tag push or
+      # workflow_dispatch from any branch. deploy needs this job, so a failure
+      # here stops the publish. Fails closed: a missing origin/main is a
+      # failure, not a pass.
+      - name: Require the deployed commit to be on main
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          if ! git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main \
+             || ! git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+            echo "::error::Could not fetch origin/main; refusing to deploy ${DEPLOY_SHA}."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$DEPLOY_SHA" refs/remotes/origin/main; then
+            echo "::error::Commit ${DEPLOY_SHA} is not on main. Merge it to main first, then tag a commit on main."
+            exit 1
+          fi
+          echo "Commit ${DEPLOY_SHA} is on main."
       - uses: actions/setup-node@v4
         with:
           node-version: 22
