@@ -23,19 +23,24 @@ function coalesceAliases(data: { [key: string]: any }, aliases: string[]) {
   }
 }
 
-function coerceToArray(input: string | string[]): string[] | undefined {
+// toml tables have no prototype, so only stringify plain scalars
+function scalarToString(input: unknown): string | undefined {
+  if (typeof input === "string" || typeof input === "number") return input.toString()
+  return undefined
+}
+
+function coerceToArray(input: unknown): string[] | undefined {
   if (input === undefined || input === null) return undefined
 
   // coerce to array
   if (!Array.isArray(input)) {
-    input = input
-      .toString()
-      .split(",")
-      .map((tag: string) => tag.trim())
+    const str = scalarToString(input)
+    if (str === undefined) return []
+    input = str.split(",").map((tag: string) => tag.trim())
   }
 
   // remove all non-strings
-  return input
+  return (input as unknown[])
     .filter((tag: unknown) => typeof tag === "string" || typeof tag === "number")
     .map((tag: string | number) => tag.toString())
 }
@@ -117,8 +122,9 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
               },
             })
 
-            if (data.title != null && data.title.toString() !== "") {
-              data.title = data.title.toString()
+            const title = scalarToString(data.title)
+            if (title !== undefined && title !== "") {
+              data.title = title
             } else {
               data.title = file.stem ?? i18n(cfg.configuration.locale).propertyDefaults.title
             }
@@ -133,18 +139,33 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
               allSlugs.push(...file.data.aliases)
             }
 
-            if (data.permalink != null && data.permalink.toString() !== "") {
-              data.permalink = data.permalink.toString() as FullSlug
+            const permalink = scalarToString(data.permalink)
+            if (permalink === undefined) {
+              delete data.permalink
+            } else if (permalink !== "") {
+              data.permalink = permalink as FullSlug
               const aliases = file.data.aliases ?? []
               aliases.push(data.permalink)
               file.data.aliases = aliases
               allSlugs.push(data.permalink)
             }
 
+            for (const field of ["description", "socialDescription", "lang"]) {
+              if (data[field] === undefined) continue
+              const value = scalarToString(data[field])
+              if (value === undefined) {
+                delete data[field]
+              } else {
+                data[field] = value
+              }
+            }
+
             const cssclasses = coerceToArray(coalesceAliases(data, ["cssclasses", "cssclass"]))
             if (cssclasses) data.cssclasses = cssclasses
 
-            const socialImage = coalesceAliases(data, ["socialImage", "image", "cover"])
+            const socialImage = scalarToString(
+              coalesceAliases(data, ["socialImage", "image", "cover"]),
+            )
 
             const created = coalesceAliases(data, ["created", "date"])
             if (created) {
@@ -163,7 +184,11 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
             const published = coalesceAliases(data, ["published", "publishDate", "date"])
             if (published) data.published = published
 
-            if (socialImage) data.socialImage = socialImage
+            if (socialImage) {
+              data.socialImage = socialImage
+            } else {
+              delete data.socialImage
+            }
 
             // Remove duplicate slugs
             const uniqueSlugs = [...new Set(allSlugs)]

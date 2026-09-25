@@ -15,7 +15,12 @@ const defaultOptions: Options = {
 // YYYY-MM-DD
 const iso8601DateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/
 
-function coerceDate(fp: string, d: any): Date {
+export function coerceDate(fp: string, d: any): Date {
+  // ignore anything that is not a date-like scalar, e.g. a toml table
+  if (!(typeof d === "string" || typeof d === "number" || d instanceof Date)) {
+    d = undefined
+  }
+
   // check ISO8601 date-only format
   // we treat this one as local midnight as the normal
   // js date ctor treats YYYY-MM-DD as UTC midnight
@@ -37,7 +42,13 @@ function coerceDate(fp: string, d: any): Date {
   return invalidDate ? new Date() : dt
 }
 
-type MaybeDate = undefined | string | number
+type MaybeDate = undefined | string | number | Date
+
+// only take date-like scalars from frontmatter, so a toml table falls through to git/filesystem
+function frontmatterDate(d: unknown): MaybeDate {
+  return typeof d === "string" || typeof d === "number" || d instanceof Date ? d : undefined
+}
+
 export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (userOpts) => {
   const opts = { ...defaultOptions, ...userOpts }
   return {
@@ -74,9 +85,9 @@ export const CreatedModifiedDate: QuartzTransformerPlugin<Partial<Options>> = (u
                 created ||= st.birthtimeMs
                 modified ||= st.mtimeMs
               } else if (source === "frontmatter" && file.data.frontmatter) {
-                created ||= file.data.frontmatter.created as MaybeDate
-                modified ||= file.data.frontmatter.modified as MaybeDate
-                published ||= file.data.frontmatter.published as MaybeDate
+                created ||= frontmatterDate(file.data.frontmatter.created)
+                modified ||= frontmatterDate(file.data.frontmatter.modified)
+                published ||= frontmatterDate(file.data.frontmatter.published)
               } else if (source === "git" && repo) {
                 try {
                   const relativePath = path.relative(repositoryWorkdir, fullFp)
