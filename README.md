@@ -41,21 +41,20 @@ This is to provide a staging ground for changes. When ready, please open a [Pull
 The 'main' branch holds the content that is ready to publish, but merging into it does **not** update the website by itself. See "Publishing to the website" below.
 
 # Publishing to the website
-Merged your Pull Request but the website hasn't changed? That is expected. The website is only rebuilt when a new version tag (e.g. `v1.2.3`) is pushed to GitHub. This lets several merged changes be reviewed together and published at once.
+Merged your Pull Request but the website hasn't changed? That is expected. The website is only rebuilt when a new version tag (e.g. `v26.7.0`) is pushed to GitHub. This lets several merged changes be reviewed together and published at once.
 
-To publish everything currently on 'main', using a terminal:
-1. Get the latest 'main':
+Versions look like `26.7.0`: the year, then a running number. You can see the history in the changelog at the top of `content/index.md`. The tag uses the same number as the changelog, with a `v` in front, so the page and the tag always match.
+
+To publish everything currently on 'main':
+1. Add a new "Changes from vPREVIOUS" entry to the changelog callout at the top of `content/index.md`, and bump the version and date in its header line. Do this in the same Pull Request as your changes, or in a Pull Request of its own.
+2. Merge that Pull Request into 'main'.
+3. Push a tag with exactly the same number as the changelog, prefixed with `v` (for example `v26.7.0`). Using a terminal:
    `git checkout main`
    `git pull`
-2. Find the latest version tag:
-   `git describe --tags --abbrev=0`
-   (or look at the [Releases](https://github.com/FIRSTChesapeake/Knowledgebase/releases) page). If there are no tags yet, start at `v1.0.0`.
-3. Choose the next version. For content fixes and small additions, increase the last number (`v1.2.3` → `v1.2.4`). For a large addition, such as a whole new section or a new season's setup guide, increase the middle number and reset the last one (`v1.2.3` → `v1.3.0`).
-4. Create and push the tag (replace `vX.Y.Z` with your chosen version):
-   `git tag vX.Y.Z`
-   `git push origin vX.Y.Z`
+   `git tag v26.7.0`
+   `git push origin v26.7.0`
 
-Without a terminal: on GitHub, go to [Releases](https://github.com/FIRSTChesapeake/Knowledgebase/releases) → "Draft a new release" → "Choose a tag", type the new version (e.g. `v1.2.4`) and select "Create new tag on publish", make sure the target is 'main', then select "Publish release".
+Without a terminal: on GitHub, go to [Releases](https://github.com/FIRSTChesapeake/Knowledgebase/releases) → "Draft a new release" → "Choose a tag", type the new version (e.g. `v26.7.0`) and select "Create new tag on publish", make sure the target is 'main', then select "Publish release".
 
 Either way, you can watch the publish on the [Actions](https://github.com/FIRSTChesapeake/Knowledgebase/actions) tab under "Deploy Quartz site to GitHub Pages". It usually takes a few minutes; once it shows a green check, the website is updated. Only commits that are already on 'main' can be published: a tag on any other branch will fail.
 
