@@ -113,7 +113,7 @@
   },
   "overrides": {
     "speech-rule-engine": {
-      "@xmldom/xmldom": "0.9.12"
+      "@xmldom/xmldom": "^0.9.12"
     }
   }
 }
