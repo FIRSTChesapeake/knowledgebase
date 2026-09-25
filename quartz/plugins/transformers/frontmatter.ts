@@ -63,11 +63,22 @@ export const FrontMatter: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
         () => {
           return (_, file) => {
             const fileData = Buffer.from(file.value as Uint8Array)
+            // gray-matter ships a default `javascript` engine (aliased from `js`) that
+            // eval()s the frontmatter body, so a file opening with `---js` would run
+            // arbitrary code during the build. Overriding it here keeps yaml and toml
+            // as the only engines that can parse; these keys take precedence over any
+            // engines or parsers passed in through the plugin options.
             const { data } = matter(fileData, {
               ...opts,
               engines: {
                 yaml: (s) => yaml.load(s, { schema: yaml.JSON_SCHEMA }) as object,
                 toml: (s) => toml.parse(s) as object,
+                javascript: () => {
+                  throw new Error("JavaScript frontmatter is not supported")
+                },
+                js: () => {
+                  throw new Error("JavaScript frontmatter is not supported")
+                },
               },
             })
 
