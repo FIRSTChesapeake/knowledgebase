@@ -36,9 +36,7 @@ function coerceToArray(input: unknown): string[] | undefined {
   if (!Array.isArray(input)) {
     const str = scalarToString(input)
     if (str === undefined) return []
-    input = str
-      .split(",")
-      .map((tag: string) => tag.trim())
+    input = str.split(",").map((tag: string) => tag.trim())
   }
 
   // remove all non-strings
