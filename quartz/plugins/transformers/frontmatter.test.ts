@@ -4,6 +4,7 @@ import { unified } from "unified"
 import remarkParse from "remark-parse"
 import { VFile } from "vfile"
 import { FrontMatter } from "./frontmatter"
+import { coerceDate } from "./lastmod"
 import { BuildCtx } from "../../util/ctx"
 
 async function parse(md: string, stem = "note") {
@@ -41,6 +42,28 @@ describe("toml frontmatter", () => {
   test("empty block falls back to the file stem for the title", async () => {
     const fm = await parse("---toml\n---\n", "my-page")
     assert.strictEqual(fm.title, "my-page")
+  })
+
+  test("table-valued title falls back to the file stem", async () => {
+    const fm = await parse("---toml\ntitle = { a = 1 }\n---\n", "my-page")
+    assert.strictEqual(fm.title, "my-page")
+  })
+
+  test("table-valued tags are dropped", async () => {
+    const fm = await parse("---toml\ntags = { x = 1 }\n---\n")
+    assert.deepStrictEqual(fm.tags, [])
+  })
+
+  test("table-valued permalink is ignored", async () => {
+    const fm = await parse("---toml\npermalink = {}\n---\n")
+    assert.strictEqual(fm.permalink, undefined)
+  })
+
+  test("table-valued date does not throw when coerced", async () => {
+    const fm = await parse("---toml\ndate = { y = 1 }\n---\n")
+    const before = Date.now()
+    const dt = coerceDate("note.md", fm.created)
+    assert(dt.getTime() >= before)
   })
 
   test("invalid toml throws", async () => {

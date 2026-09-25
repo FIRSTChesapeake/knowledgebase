@@ -15,7 +15,12 @@ const defaultOptions: Options = {
 // YYYY-MM-DD
 const iso8601DateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/
 
-function coerceDate(fp: string, d: any): Date {
+export function coerceDate(fp: string, d: any): Date {
+  // ignore anything that is not a date-like scalar, e.g. a toml table
+  if (!(typeof d === "string" || typeof d === "number" || d instanceof Date)) {
+    d = undefined
+  }
+
   // check ISO8601 date-only format
   // we treat this one as local midnight as the normal
   // js date ctor treats YYYY-MM-DD as UTC midnight
