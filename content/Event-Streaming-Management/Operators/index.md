@@ -25,18 +25,26 @@ after an event. If you're looking for the OBS/hardware setup instead, see
    and what to do about them.
 7. [[Event-Streaming-Management/Operators/7. Your First Event|Your First Event]] — a day-before/
    morning-of/during/after checklist for your first time running an event.
+8. [[Event-Streaming-Management/Operators/8. YouTube Broadcasts|YouTube Broadcasts]] — broadcast
+   days, creating and replacing a broadcast, what changes the public link, and deleting replaced
+   broadcasts.
 
 # Typical Event Workflow
 
 > [!steps]+ Tap to expand/collapse the typical order of operations for an event day
+> 0. Optional, the day before: stream a pre-event test to check your setup end to end (see
+>    [[Event-Streaming-Management/Operators/7. Your First Event#Day Before|Your First Event]]).
 > 1. Before the event: confirm the event is configured (see
 >    [[Event-Streaming-Management/Operators/2. Managing Events|Managing Events]]).
 > 2. Pair OBS with the platform if you haven't already (see
 >    [[Event-Streaming-Management/Operators/4. OBS Plugin Guide|OBS Plugin Guide]]), and select the
 >    event for today.
-> 3. Start your OBS stream as usual, then start the push/broadcast from the event control center if
->    your event uses restreaming (see
->    [[Event-Streaming-Management/Operators/3. Running a Live Event|Running a Live Event]]).
+> 3. Start streaming in OBS. If your event restreams, then once the stream is online click
+>    **Start Push**, wait for the **YT Restream** row to read **Ready for Live**, then click
+>    **Go Live** (with a manual restream key there's no Go Live; the row reads **Pushing**). See
+>    [[Event-Streaming-Management/Operators/3. Running a Live Event|Running a Live Event]]. If
+>    YouTube shows the stream as healthy but it won't play, see
+>    [[Event-Streaming-Management/Operators/6. Troubleshooting#YouTube Shows Healthy but Won't Play|Troubleshooting]].
 > 4. During the event, watch the status panel for health warnings and let the pipeline cut and
 >    publish clips automatically.
 > 5. After the event, spot-check the Clips and Uploads pages (see
