@@ -111,11 +111,6 @@
     --bg: #7a43b510;
     --callout-icon: var(--callout-icon-example);
   }
-  &[data-callout="steps"] {
-    --color: var(--secondary);
-    --border: var(--lightgray);
-    --callout-icon: var(--callout-icon-example);
-  }
 
   &[data-callout="quote"] {
     --color: var(--secondary);
