@@ -55,8 +55,14 @@ longer explanation elsewhere, this page links to it rather than repeating it.
   event shows a "Pre-event test" badge, never restreams, and becomes live at the start time. See
   [[Event-Streaming-Management/Operators/6. Troubleshooting#The Event Shows Pre-Event Test and Start Push Is Refused|Troubleshooting]].
 - **Stream window** — **Stream start** and **Stream end** on the event configuration page: when the
-  event's stream key may publish, plus one day before as a pre-event test. See
+  event's stream key may publish, plus one day before as a pre-event test. Its times are shown in
+  the event's timezone, and **Hide past events** hides an event once its window has ended. See
   [[Event-Streaming-Management/Client-Administration/6. Event Configuration Reference#Stream Window|Event Configuration Reference]].
+- **Completed** — an event that's over. Someone clicks **Complete**, or an in-progress event
+  completes itself a grace period (120 minutes by default) after its stream window ends, when
+  nothing is recording. A completed event refuses OBS publishes until a Client Admin clicks
+  **Reopen**. See
+  [[Event-Streaming-Management/Operators/2. Managing Events#When an Event Completes|When an Event Completes]].
 - **Holding / standby slate** — "Holding — standby slate on YouTube". If OBS drops during a push,
   the push keeps YouTube fed with a black slate while OBS reconnects, and gives up after the hold
   timeout. See
@@ -92,9 +98,10 @@ longer explanation elsewhere, this page links to it rather than repeating it.
 > [[Event-Streaming-Management/Client-Administration/1. Members and Roles#What Each Role Can Actually Do|What Each Role Can Actually Do]].
 
 > [!question]- YouTube says the stream is healthy but it won't play.
-> YouTube's "healthy" only means it is *receiving* video; nothing in the platform checks that
-> YouTube is actually playing the stream or that it has audio. Missing or non-AAC audio is a common
-> cause. See
+> YouTube's "healthy" only means it is *receiving* video. The platform warns when your stream has
+> no audio track ("No audio track from OBS") and when YouTube still hasn't started playback a
+> minute after the broadcast began starting, but it can't confirm viewers can play it. Missing,
+> silent or non-AAC audio is a common cause. See
 > [[Event-Streaming-Management/Operators/6. Troubleshooting#YouTube Shows Healthy but Won't Play|YouTube Shows Healthy but Won't Play]].
 
 > [!question]- Why can't I change the YouTube channel, restream target or timezone?
