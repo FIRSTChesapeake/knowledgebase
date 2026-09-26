@@ -42,6 +42,7 @@ import {
 import {
   UPSTREAM_NAME,
   QUARTZ_SOURCE_BRANCH,
+  SYNC_BRANCH,
   QUARTZ_SOURCE_REPO,
   ORIGIN_NAME,
   version,
@@ -770,7 +771,7 @@ export async function handleSync(argv) {
       "Pulling updates from your repository. You may need to resolve some `git` conflicts if you've made changes to components or plugins.",
     )
     try {
-      gitPull(ORIGIN_NAME, QUARTZ_SOURCE_BRANCH)
+      gitPull(ORIGIN_NAME, SYNC_BRANCH)
     } catch {
       console.log(
         styleText("red", "An error occurred while pulling updates from your repository.") +
