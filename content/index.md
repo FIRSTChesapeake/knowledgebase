@@ -18,7 +18,10 @@ Documentation for the platform that turns event livestreams into published match
 ****
 
 
-> [!summary] Knowledgebase version 26.8.0 (updated 9/26/26)
+> [!summary] Knowledgebase version 26.9.0 (updated 9/26/26)
+> Changes from v26.8.0:
+> - Updated the Event Streaming Management manual for the latest platform release: events now complete themselves after their stream window (Clear Stale is gone, and Reopen is for completed events), new warnings when YouTube hasn't started playback or OBS sends no audio, plain-language status labels and greyed-out controls in the OBS dock, re-sending expired invites and the rules for disabling admins, rotating stream keys from the admin page, removing or disconnecting a YouTube channel, and what happens to a hand-set stream window when FIRST reschedules an event.
+> 
 > Changes from v26.7.0:
 > - Brought the Event Streaming Management manual up to date with the platform: greyed-out controls that explain why (🔒), the YT Restream states and standby slate, a new YouTube Broadcasts guide (broadcast days, replacing a broadcast, Delete on YouTube), a troubleshooting section for when YouTube shows the stream as healthy but it won't play, pre-event tests and the stream window, field locks, invite expiry, the updated OBS plugin installer, and a full table of what each role can do.
 > 
