@@ -14,3 +14,4 @@ quartz/cli/tui/dist/
 .turbo/
 plugins/*/dist
 plugins/*/node_modules
+quartz.lock.json
