@@ -18,7 +18,10 @@ Documentation for the platform that turns event livestreams into published match
 ****
 
 
-> [!summary] Knowledgebase version 26.7.0 (updated 9/24/26)
+> [!summary] Knowledgebase version 26.8.0 (updated 9/26/26)
+> Changes from v26.7.0:
+> - Brought the Event Streaming Management manual up to date with the platform: greyed-out controls that explain why (🔒), the YT Restream states and standby slate, a new YouTube Broadcasts guide (broadcast days, replacing a broadcast, Delete on YouTube), a troubleshooting section for when YouTube shows the stream as healthy but it won't play, pre-event tests and the stream window, field locks, invite expiry, the updated OBS plugin installer, and a full table of what each role can do.
+> 
 > Changes from v26.6.0:
 > - Updated the Event Streaming Management manual: a Copy button for stream keys, what to do when a clip is held and retries, how to rotate a key, upload size limits, confirming a drift, client test events, and a fix for choosing the right YouTube channel.
 > - Applied security and maintenance updates to the tools that build this site.
