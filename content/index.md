@@ -18,7 +18,11 @@ Documentation for the platform that turns event livestreams into published match
 ****
 
 
-> [!summary] Knowledgebase version 26.9.0 (updated 9/26/26)
+> [!summary] Knowledgebase version 26.10.0 (updated 9/26/26)
+> Changes from v26.9.0:
+> - Updated the tool that builds this site to Quartz 5. Page addresses are now all lowercase; old addresses, bookmarks and QR codes redirect to the new ones. The footer now shows the Quartz version.
+> - Kept the protection against unsafe page headers in the new version.
+> 
 > Changes from v26.8.0:
 > - Updated the Event Streaming Management manual for the latest platform release: events now complete themselves after their stream window (Clear Stale is gone, and Reopen is for completed events), new warnings when YouTube hasn't started playback or OBS sends no audio, plain-language status labels and greyed-out controls in the OBS dock, re-sending expired invites and the rules for disabling admins, rotating stream keys from the admin page, removing or disconnecting a YouTube channel, and what happens to a hand-set stream window when FIRST reschedules an event.
 > 
