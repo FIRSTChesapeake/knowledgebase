@@ -16,6 +16,7 @@ published, per-match highlight clips. In short, the platform:
 - Automatically detects match timing from the *FIRST* Events APIs (and, for FRC events, The Blue
   Alliance).
 - Cuts a clip for each match and uploads it to YouTube.
+- Lets you test the feed from the day before the event.
 - Optionally restreams the event as a full YouTube broadcast, and can drive event signage
   (pit/queue/audience displays) through the same platform.
 
@@ -34,8 +35,8 @@ Pick the guide that matches what you're doing:
   administer your organization's account on the platform: members, roles, integrations, and
   branding.
 - **[[Event-Streaming-Management/System-Administration/index|System Administration]]** — you
-  install, configure, or operate the platform itself: Kubernetes deployment, secrets, system-wide
-  settings, and troubleshooting.
+  install, configure, or operate the platform itself: system-wide settings, monitoring and
+  troubleshooting (deployment itself is documented in the platform's repository).
 
 Also see [[Event-Streaming-Management/FAQ and Glossary|FAQ and Glossary]] for terms and quick
 answers that come up across all three guides.
