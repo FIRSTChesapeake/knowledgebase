@@ -1,3 +1,14 @@
 @use "./variables.scss" as *;
 
 // put your custom CSS here!
+
+.page {
+  max-width: 95%;
+}
+
+// "steps" is a site-specific callout ([!steps]+ / [!steps]-) used for how-to procedures
+.callout[data-callout="steps"] {
+  --color: var(--secondary);
+  --border: var(--lightgray);
+  --callout-icon: var(--callout-icon-example);
+}
