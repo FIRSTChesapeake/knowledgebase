@@ -48,6 +48,11 @@ jobs:
           node-version: 22
       - name: Install Dependencies
         run: npm ci
+      # Builds the local frontmatter plugin in plugins/note-properties (the other
+      # plugins come from npm ci). --from-config resolves it from its relative
+      # path in quartz.config.yaml; there is no committed quartz.lock.json.
+      - name: Install Quartz plugins
+        run: npx quartz plugin install --from-config
       - name: Build Quartz
         run: npx quartz build
       - name: Upload artifact
