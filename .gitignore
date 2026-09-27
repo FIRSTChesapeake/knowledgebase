@@ -9,3 +9,9 @@ tsconfig.tsbuildinfo
 private/
 .replit
 replit.nix
+.quartz/
+quartz/cli/tui/dist/
+.turbo/
+plugins/*/dist
+plugins/*/node_modules
+quartz.lock.json

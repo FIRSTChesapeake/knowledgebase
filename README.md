@@ -19,10 +19,10 @@ Desired future additions:
 	- Pit power setup instructions
 
 # Contributing
-Required software: [Obsidian](https://obsidian.md) and [Node.JS](https://nodejs.org) v20 or higher.
+Required software: [Obsidian](https://obsidian.md) and [Node.JS](https://nodejs.org) v22 or higher.
 1. Clone the Github repository.
 2. Navigate to the folder of the cloned repository and issue the following command in a terminal:
-   `npm i`.
+   `npm i`, then `npx quartz plugin install --from-config` (this builds the site's local frontmatter plugin, see "Updating Quartz" below).
 3. Open Obsidian, then select the "Open Folder as Vault" option.
 4. Navigate to the folder of the cloned repository and select the "content" folder within it, then select "Open Folder".
 e.g., if the repository has been cloned to C:\\Users\\Admin\\Documents\\Knowledgebase, you should open C:\\Users\\Admin\\Documents\\Knowledgebase\\content as the vault.
@@ -31,7 +31,9 @@ e.g., if the repository has been cloned to C:\\Users\\Admin\\Documents\\Knowledg
    For details on editing and style suggestions, please see the repository's wiki.
 
 When editing, it is recommended to enable the live Web preview by executing the command:
-`npx quartz build --serve`. This will start a website on your local machine at http://localhost:8080 that automatically refreshes as content changes are made. The preview on Obsidian can sometimes be inaccurate to the final Web appearance.
+`npx quartz build --serve` (run `npx quartz plugin install --from-config` once first, if you haven't). This will start a website on your local machine at http://localhost:8080 that automatically refreshes as content changes are made. The preview on Obsidian can sometimes be inaccurate to the final Web appearance.
+
+Page addresses on the website are all lowercase (for example `.../ftc/ftc-av/...`). Addresses from before the Quartz 5 update, which kept the capital letters, still work: they redirect to the lowercase page.
 
 
 
@@ -58,3 +60,15 @@ Without a terminal: on GitHub, go to [Releases](https://github.com/FIRSTChesapea
 
 Either way, you can watch the publish on the [Actions](https://github.com/FIRSTChesapeake/Knowledgebase/actions) tab under "Deploy Quartz site to GitHub Pages". It usually takes a few minutes; once it shows a green check, the website is updated. Only commits that are already on 'main' can be published: a tag on any other branch will fail.
 
+# Updating Quartz
+The site is built with [Quartz](https://github.com/jackyzha0/quartz) 5, imported from upstream commit `97a2d05` (the `v5` branch on 2026-09-20). The framework files (`quartz/`, `package.json`, `package-lock.json`, `quartz.ts`, `quartz.config.default.yaml` and the other root build files) are a copy of upstream. The site's own settings live in `quartz.config.yaml`, and its style changes in `quartz/styles/custom.scss`.
+
+To update Quartz, copy the framework files from a newer upstream commit in a single change, the same way, and record the commit here. Then compare `quartz.config.default.yaml` with the previous one and carry any new settings into `quartz.config.yaml`. Don't run `npx quartz upgrade` or `npx quartz create`: this repository doesn't follow upstream's branch history, so an upgrade would conflict on every file.
+
+A few files in `quartz/` carry local changes that must be reapplied after an update:
+- `quartz/plugins/loader/config-loader.ts`, `componentLoader.ts` and `frameLoader.ts`: an enabled plugin that fails to install, load or start stops the build. Upstream only prints a warning and publishes the site without that plugin, for example with raw page headers and drafts when the frontmatter plugin is missing. Tested by `config-loader.strict.test.ts`.
+- `quartz/util/escape.ts`: `unescapeHTML` decodes `&amp;` last. Tested by `escape.test.ts`.
+- `quartz/cli/constants.js` and `handlers.js`: `npx quartz sync` uses the per-user staging branch.
+- `quartz/styles/custom.scss`, `quartz/static/icon.png` and `og-image.png`: the site's styles and icons.
+
+`plugins/note-properties` is a local copy of Quartz's frontmatter plugin. The upstream plugin still lets a page whose header starts with `---js` run JavaScript while the site is built, and it bundles an outdated `toml` parser. The local copy only accepts YAML, TOML and JSON headers and pins current parser versions. Its README lists every change against upstream. When updating Quartz, keep this copy unless upstream has fixed both problems. Run its tests with `npm ci && npm test` inside that folder.

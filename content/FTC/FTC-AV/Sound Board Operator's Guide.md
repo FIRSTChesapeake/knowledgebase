@@ -10,12 +10,12 @@ The Yamaha DM3 sound board is simple in its construction, yet powerful in functi
    Most settings in the center section of the mixer (between the bottom bar and the top bar) pertain to one channel. You can press the "SEL" button 
 4. This "Touch and Turn" knob offers granular physical control for many types of settings on the console. Touching certain controls (particularly sliders) on the console causes them to begin to  slowly pulse with a red color. This means that the parameter can be adjusted using the knob. There are also some more unexpected areas that you can use this knob, so tap around to see what you can control (just don't make huge unexpected changes in the middle of an important situation)!
 5. These user defined keys offer shortcuts to actions that are commonly utilized. In the current setup of the sound board, the user defined keys are setup as follows:
-	- **Key #1**: Mute all **Lavalier** microphones (a.k.a. Emcee mics)
-	- **Key #2**: Mute all **Handheld** microphones (a.k.a. Game Announcer mics)
-	- **Key #3**: Mute **all microphones** (excludes game sounds, video sounds, and music)
-	- Key #4: Unassigned
-	- Key #5: Unassigned
-	- **Key #6**: **Panic Mute ALL** (mutes all sound, regardless of source)
+	- **Key \#1**: Mute all **Lavalier** microphones (a.k.a. Emcee mics)
+	- **Key \#2**: Mute all **Handheld** microphones (a.k.a. Game Announcer mics)
+	- **Key \#3**: Mute **all microphones** (excludes game sounds, video sounds, and music)
+	- Key \#4: Unassigned
+	- Key \#5: Unassigned
+	- **Key \#6**: **Panic Mute ALL** (mutes all sound, regardless of source)
 
 ### Wait, what's a fader?
 A fader is a special type of volume slider. It controls volume on a logarithmic scale to mimic how our ears perceive sound level. The scale is laid out in decibels (dB) from -∞ to +10, with the range from -5 to +5 being considered the most critical. This is why the markings in this range are much more frequent, with every dB being marked, instead of only every 2.5 dB. Faders allow smooth volume adjustments that are less likely to cause harsh drop outs or sudden increases. For best results, slowly adjust channel faders to adjust the balance in volume between different elements. Then, utilize the main volume fader(s) to make overall volume adjustments as necessary.

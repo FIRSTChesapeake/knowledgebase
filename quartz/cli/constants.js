@@ -2,17 +2,22 @@ import path from "path"
 import { readFileSync } from "fs"
 import { spawnSync } from "child_process"
 
-const local_username_proc = spawnSync("git", ["config", "user.name"], {
-    encoding: "utf-8" });
-
-const local_username_str = local_username_proc.stdout.trim()
-const local_username = local_username_str.replaceAll(/\s/g,"_")
 /**
  * All constants relating to helpers or handlers
  */
 export const ORIGIN_NAME = "origin"
 export const UPSTREAM_NAME = "upstream"
-export const QUARTZ_SOURCE_BRANCH = local_username + "-v4"
+export const QUARTZ_SOURCE_BRANCH = "v5"
+// `quartz sync --pull` pulls from a per-contributor staging branch on origin,
+// "<git user.name with whitespace as _>-v4", rather than upstream's v5 branch.
+// The -v4 suffix is kept so existing staging branches keep working.
+const localUsername = (
+  spawnSync("git", ["config", "user.name"], { encoding: "utf-8" }).stdout ?? ""
+)
+  .trim()
+  .replaceAll(/\s/g, "_")
+export const SYNC_BRANCH = localUsername + "-v4"
+export const QUARTZ_SOURCE_REPO = "https://github.com/jackyzha0/quartz.git"
 export const cwd = process.cwd()
 export const cacheDir = path.join(cwd, ".quartz-cache")
 export const cacheFile = "./quartz/.quartz-cache/transpiled-build.mjs"
