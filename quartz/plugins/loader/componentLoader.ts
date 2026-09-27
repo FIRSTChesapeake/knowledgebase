@@ -63,9 +63,12 @@ export async function loadComponentsFromPackage(
         )
       }
     }
-  } catch {
+  } catch (err) {
+    // Local change: fail instead of warning, so the build stops (see config-loader.ts).
     if (manifest.components && Object.keys(manifest.components).length > 0) {
-      console.warn(`Plugin "${pluginName}" declares components but failed to load them`)
+      throw new Error(
+        `Plugin "${pluginName}" declares components but failed to load them: ${err instanceof Error ? err.message : String(err)}`,
+      )
     }
   }
 }

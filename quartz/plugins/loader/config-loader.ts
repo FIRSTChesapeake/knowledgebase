@@ -264,6 +264,16 @@ export async function loadQuartzConfig(
   const enabledEntries = json.plugins.filter((e) => e.enabled)
   const manifests = new Map<string, PluginManifest>()
 
+  // Local change: an enabled plugin that cannot be installed, loaded or
+  // instantiated fails the build. Upstream only logs and carries on, which
+  // publishes a site without that plugin (e.g. raw frontmatter and drafts
+  // when the frontmatter plugin is missing).
+  const failures: string[] = []
+  const fail = (message: string) => {
+    console.error(styleText("red", `✗`) + ` ${message}`)
+    failures.push(message)
+  }
+
   // Ensure all plugins are installed and collect native deps
   const allNativeDeps = new Map<string, Map<string, string>>()
   for (const entry of enabledEntries) {
@@ -277,9 +287,8 @@ export async function loadQuartzConfig(
         allNativeDeps.set(gitSpec.name, result.nativeDeps)
       }
     } catch (err) {
-      console.error(
-        styleText("red", `✗`) +
-          ` Failed to install plugin: ${styleText("yellow", formatSourceDisplay(entry.source))}\n` +
+      fail(
+        `Failed to install plugin: ${styleText("yellow", formatSourceDisplay(entry.source))}\n` +
           `  ${err instanceof Error ? err.message : String(err)}`,
       )
     }
@@ -297,9 +306,8 @@ export async function loadQuartzConfig(
         manifests.set(sourceKey(entry.source), manifest)
       }
     } catch (err) {
-      console.error(
-        styleText("red", `✗`) +
-          ` Failed to load manifest: ${styleText("yellow", formatSourceDisplay(entry.source))}\n` +
+      fail(
+        `Failed to load manifest: ${styleText("yellow", formatSourceDisplay(entry.source))}\n` +
           `  ${err instanceof Error ? err.message : String(err)}`,
       )
     }
@@ -357,6 +365,8 @@ export async function loadQuartzConfig(
         // Some plugins (e.g. Bases view registrations) rely on side effects
         // in their index module to register functionality.
         const entryPoint = getPluginEntryPoint(gitSpec.name)
+        const hasComponents = manifest?.components && Object.keys(manifest.components).length > 0
+        const hasFrames = manifest?.frames && Object.keys(manifest.frames).length > 0
         try {
           const module = await import(toFileUrl(entryPoint))
           // If the module exports an init() function, call it with merged options
@@ -366,14 +376,26 @@ export async function loadQuartzConfig(
             const options = { ...manifest?.defaultOptions, ...entry.options, ...initOverrides }
             await module.init(Object.keys(options).length > 0 ? options : undefined)
           }
-        } catch (e) {
-          // Side-effect import failed — continue with manifest-based loading
+        } catch (err) {
+          // Side-effect import failed — continue with manifest-based loading,
+          // unless there is nothing else to load.
+          if (!hasComponents && !hasFrames) {
+            fail(
+              `Failed to load plugin "${extractPluginName(entry.source)}": ${err instanceof Error ? err.message : String(err)}`,
+            )
+          }
         }
-        if (manifest?.components && Object.keys(manifest.components).length > 0) {
-          await loadComponentsFromPackage(gitSpec.name, manifest)
-        }
-        if (manifest?.frames && Object.keys(manifest.frames).length > 0) {
-          await loadFramesFromPackage(gitSpec.name, manifest)
+        try {
+          if (hasComponents) {
+            await loadComponentsFromPackage(gitSpec.name, manifest)
+          }
+          if (hasFrames) {
+            await loadFramesFromPackage(gitSpec.name, manifest)
+          }
+        } catch (err) {
+          fail(
+            `Failed to load plugin "${extractPluginName(entry.source)}": ${err instanceof Error ? err.message : String(err)}`,
+          )
         }
       } else {
         const entryPoint = getPluginEntryPoint(gitSpec.name)
@@ -388,24 +410,25 @@ export async function loadQuartzConfig(
               await loadFramesFromPackage(gitSpec.name, manifest)
             }
           } else {
-            console.warn(
-              styleText("yellow", `⚠`) +
-                ` Could not determine category for plugin "${extractPluginName(entry.source)}". Skipping.`,
-            )
+            fail(`Could not determine category for plugin "${extractPluginName(entry.source)}".`)
           }
-        } catch {
+        } catch (err) {
           const hasComponents = manifest?.components && Object.keys(manifest.components).length > 0
           const hasFrames = manifest?.frames && Object.keys(manifest.frames).length > 0
-          if (hasComponents) {
-            await loadComponentsFromPackage(gitSpec.name, manifest)
+          let loadErr: unknown = hasComponents || hasFrames ? undefined : err
+          try {
+            if (hasComponents) {
+              await loadComponentsFromPackage(gitSpec.name, manifest)
+            }
+            if (hasFrames) {
+              await loadFramesFromPackage(gitSpec.name, manifest)
+            }
+          } catch (componentErr) {
+            loadErr = componentErr
           }
-          if (hasFrames) {
-            await loadFramesFromPackage(gitSpec.name, manifest)
-          }
-          if (!hasComponents && !hasFrames) {
-            console.warn(
-              styleText("yellow", `⚠`) +
-                ` Could not load plugin "${extractPluginName(entry.source)}" to detect category. Skipping.`,
+          if (loadErr !== undefined) {
+            fail(
+              `Could not load plugin "${extractPluginName(entry.source)}": ${loadErr instanceof Error ? loadErr.message : String(loadErr)}`,
             )
           }
         }
@@ -454,9 +477,8 @@ export async function loadQuartzConfig(
 
         const factory = findFactory(module, expectedCategory)
         if (!factory) {
-          console.warn(
-            styleText("yellow", `⚠`) +
-              ` Plugin "${extractPluginName(entry.source)}" has no factory function for category "${expectedCategory}". ` +
+          fail(
+            `Plugin "${extractPluginName(entry.source)}" has no factory function for category "${expectedCategory}". ` +
               `Ensure your plugin exports a default function, a "plugin" named export, or a single exported function.`,
           )
           continue
@@ -465,25 +487,22 @@ export async function loadQuartzConfig(
         const options = { ...manifest?.defaultOptions, ...entry.options, ...pluginOverrides }
         const instance = factory(Object.keys(options).length > 0 ? options : undefined)
         if (!instance || typeof instance !== "object") {
-          console.warn(
-            styleText("yellow", `⚠`) +
-              ` Plugin "${extractPluginName(entry.source)}" factory did not return a valid plugin instance. Skipping.`,
+          fail(
+            `Plugin "${extractPluginName(entry.source)}" factory did not return a valid plugin instance.`,
           )
           continue
         }
         if (!validateCategory(instance, expectedCategory)) {
-          console.warn(
-            styleText("yellow", `⚠`) +
-              ` Plugin "${extractPluginName(entry.source)}" declares category "${expectedCategory}" ` +
-              `but its factory returned an instance missing the required methods. Skipping.`,
+          fail(
+            `Plugin "${extractPluginName(entry.source)}" declares category "${expectedCategory}" ` +
+              `but its factory returned an instance missing the required methods.`,
           )
           continue
         }
         instances.push(instance)
       } catch (err) {
-        console.error(
-          styleText("red", `✗`) +
-            ` Failed to instantiate plugin "${extractPluginName(entry.source)}": ${err instanceof Error ? err.message : String(err)}`,
+        fail(
+          `Failed to instantiate plugin "${extractPluginName(entry.source)}": ${err instanceof Error ? err.message : String(err)}`,
         )
       }
     }
@@ -505,6 +524,12 @@ export async function loadQuartzConfig(
     filters: await instantiate(filters, "filter"),
     emitters: [...builtinEmitters, ...(await instantiate(emitters, "emitter"))],
     pageTypes: [...(await instantiate(pageTypes, "pageType")), ...builtinPageTypes],
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `${failures.length} enabled plugin(s) failed to load; refusing to build without them. See above for details.`,
+    )
   }
 
   // Load layout and add PageTypeDispatcher to emitters.

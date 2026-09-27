@@ -65,4 +65,10 @@ The site is built with [Quartz](https://github.com/jackyzha0/quartz) 5, imported
 
 To update Quartz, copy the framework files from a newer upstream commit in a single change, the same way, and record the commit here. Then compare `quartz.config.default.yaml` with the previous one and carry any new settings into `quartz.config.yaml`. Don't run `npx quartz upgrade` or `npx quartz create`: this repository doesn't follow upstream's branch history, so an upgrade would conflict on every file.
 
+A few files in `quartz/` carry local changes that must be reapplied after an update:
+- `quartz/plugins/loader/config-loader.ts`, `componentLoader.ts` and `frameLoader.ts`: an enabled plugin that fails to install, load or start stops the build. Upstream only prints a warning and publishes the site without that plugin, for example with raw page headers and drafts when the frontmatter plugin is missing. Tested by `config-loader.strict.test.ts`.
+- `quartz/util/escape.ts`: `unescapeHTML` decodes `&amp;` last. Tested by `escape.test.ts`.
+- `quartz/cli/constants.js` and `handlers.js`: `npx quartz sync` uses the per-user staging branch.
+- `quartz/styles/custom.scss`, `quartz/static/icon.png` and `og-image.png`: the site's styles and icons.
+
 `plugins/note-properties` is a local copy of Quartz's frontmatter plugin. The upstream plugin still lets a page whose header starts with `---js` run JavaScript while the site is built, and it bundles an outdated `toml` parser. The local copy only accepts YAML, TOML and JSON headers and pins current parser versions. Its README lists every change against upstream. When updating Quartz, keep this copy unless upstream has fixed both problems. Run its tests with `npm ci && npm test` inside that folder.

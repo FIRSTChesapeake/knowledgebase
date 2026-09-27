@@ -39,9 +39,12 @@ export async function loadFramesFromPackage(
       // Register under the frame's declared name
       frameRegistry.register(pageFrame.name, pageFrame, pluginName)
     }
-  } catch {
+  } catch (err) {
+    // Local change: fail instead of warning, so the build stops (see config-loader.ts).
     if (manifest.frames && Object.keys(manifest.frames).length > 0) {
-      console.warn(`Plugin "${pluginName}" declares frames but failed to load them`)
+      throw new Error(
+        `Plugin "${pluginName}" declares frames but failed to load them: ${err instanceof Error ? err.message : String(err)}`,
+      )
     }
   }
 }
