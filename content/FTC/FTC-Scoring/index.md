@@ -6,6 +6,7 @@ This category of the knowledgebase features setup articles for specific aspects 
 While we make every effort to ensure these guides are in agreement with the official docs, if any of these guides conflict with those instructions, the official documentation shall prevail. If inconsistencies are observed, please let us know by filing an issue on the [knowledgebase repository](https://github.com/FIRSTChesapeake/knowledgebase/issues). Requests for additional guides are also welcomed and should be filed in the same location.
 The following guides are currently available:
 
+# [[Scoring Server Setup]]
 # [[Field Timer (Raspberry Pi) Setup]]
 # [[Head Referee & Referee Tablet Setup]]
 # [[Inspection Tracking Setup and Usage]]
