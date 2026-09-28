@@ -5,7 +5,7 @@
     "light": {
       "workdir": "",
       "image": "node:22-bookworm",
-      "memory": "1536m",
+      "memory": "1280m",
       "run": "npm ci --no-audit --no-fund && (cd plugins/note-properties && rm -rf dist && npm ci --no-audit --no-fund && npm run typecheck && npm test) && rm -rf .quartz quartz.lock.json && npx quartz plugin install --from-config && npx tsx --test \"quartz/**/*.test.ts\" \"quartz/**/*.test.js\" && npx quartz build"
     }
   }
