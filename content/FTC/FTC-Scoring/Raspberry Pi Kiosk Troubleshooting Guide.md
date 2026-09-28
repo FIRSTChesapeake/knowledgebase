@@ -15,7 +15,7 @@ Verify that the HDMI cable is securely plugged into the monitor and the Raspberr
 If none of this helps, contact the FTA for resolution, and afterwards, please file an issue on this [document repository](https://github.com/FIRSTChesapeake/Knowledgebase/issues) so that it can be added to this list.
 
 ### No Event Code
-This state indicates that the Raspberry Pi kiosk successfully connected to the FTC-Live server, but was unable to determine what the current event is. If multiple events are defined in the FTC-Live database, this will trigger this error. Manually defining the current event code will fix this issue. To do this:
+This state indicates that the Raspberry Pi kiosk successfully connected to the FTC-Live server, but was unable to determine what the current event is. If multiple events are defined in the FTC-Live database, this will trigger this error. The preferred way to fix this issue is to have the Technical Director (formerly Lead Scorekeeper) "hide" all events that are not currently being played. Talk with the Technical Director if you are seeing this issue. If the Technical Director hid all other events, reboot the kiosk to try again. If hiding is not possible, manually defining the current event code will fix this issue. To do this:
 1. Connect a USB keyboard to the Raspberry Pi. 
 2. While holding the left CTRL and ALT buttons, press F2. This will change to a text terminal view.
 3. Log in with the username `pi` and password `mushroom`.
