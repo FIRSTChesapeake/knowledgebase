@@ -137,7 +137,8 @@ longer explanation elsewhere, this page links to it rather than repeating it.
 
 > [!question]- Video is coming in, so why can't I Start Push?
 > The event is in a pre-event test: encoders can publish from the day before, but pushing to YouTube
-> opens at the event's start time. See
+> opens at the event's start time. The exception is an event with a setup-day test video, which
+> can be pushed to on the day before. See
 > [[Event-Streaming-Management/Operators/6. Troubleshooting#The Event Shows Pre-Event Test and Start Push Is Refused|Troubleshooting]].
 
 > [!question]- OBS dropped. Is YouTube still up?
