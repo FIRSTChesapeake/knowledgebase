@@ -52,8 +52,20 @@ longer explanation elsewhere, this page links to it rather than repeating it.
   URL) that the platform can drive on a per-event basis. See
   [[Event-Streaming-Management/Operators/5. Clips, Uploads and Signage#Signage|Clips, Uploads and Signage]].
 - **Pre-event test** (status `pre_live`) — video is coming in before the event's start time. The
-  event shows a "Pre-event test" badge, never restreams, and becomes live at the start time. See
+  event shows a "Pre-event test" badge, doesn't restream (unless the event has a setup-day test
+  video), and becomes live at the start time. See
   [[Event-Streaming-Management/Operators/6. Troubleshooting#The Event Shows Pre-Event Test and Start Push Is Refused|Troubleshooting]].
+- **Setup-day test video** — an optional unlisted YouTube video for the day before the event, so
+  a pre-event test can be pushed all the way to YouTube without touching the broadcast days. It
+  takes video on that day only. See
+  [[Event-Streaming-Management/Operators/8. YouTube Broadcasts#The Setup-Day Test Video|The Setup-Day Test Video]].
+- **YouTube preview** — YouTube's private preview of a broadcast (its monitor stream), shown as
+  **Preview (not public)**. When system admins turn it on, a new broadcast enters the preview by
+  itself once the push is running, so it can be checked in YouTube Studio before **Go Live**. See
+  [[Event-Streaming-Management/Operators/3. Running a Live Event#The YouTube Preview|The YouTube Preview]].
+- **Push failing — retrying** — the push to YouTube keeps stopping while OBS is still connected.
+  It retries by itself up to five times, then becomes a **Push error**. See
+  [[Event-Streaming-Management/Operators/3. Running a Live Event#Starting and Stopping the Push|Running a Live Event]].
 - **Stream window** — **Stream start** and **Stream end** on the event configuration page: when the
   event's stream key may publish, plus one day before as a pre-event test. Its times are shown in
   the event's timezone, and **Hide past events** hides an event once its window has ended. See

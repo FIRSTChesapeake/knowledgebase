@@ -6,3 +6,5 @@ Welcome to the knowledgebase category for *FIRST* Chesapeake's *FIRST* Tech Chal
 # [[FTC/FTC-AV/index|FTC A/V Setup Guide]]
 
 # [[FTC/FTC-Scoring/index|FTC Scoring Setup Guides]]
+
+# [[FTC/FTC-Registration/index|FTC Registration]]
