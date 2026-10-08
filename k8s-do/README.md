@@ -8,8 +8,8 @@ Pages and the cluster.
 
 | File | Applied by |
 |---|---|
-| `network-policy.yaml`, `service.yaml`, `deployment.yaml`, `ingress.yaml` | CI, on every deploy |
-| `bootstrap/namespace.yaml`, `bootstrap/deploy-rbac.yaml`, `bootstrap/admission-policy.yaml` | a cluster admin, once, by hand |
+| `service.yaml`, `deployment.yaml`, `ingress.yaml` | CI, on every deploy |
+| `bootstrap/namespace.yaml`, `bootstrap/network-policy.yaml`, `bootstrap/deploy-rbac.yaml`, `bootstrap/admission-policy.yaml` | a cluster admin, once, by hand |
 
 ## Placeholders
 
@@ -37,6 +37,11 @@ committed `quartz.config.yaml` keeps the GitHub Pages `baseUrl`.
 - The GHCR package `knowledgebase` is **public**, so the cluster pulls it with
   no pull secret. A new package starts private: after the first push, set its
   visibility to public in the package settings, then re-run the deploy.
+- Package settings, **Manage Actions access**: only this repository, with
+  the **Write** role; no other repository. Under **Manage access**, no
+  person beyond the maintainers has write. Anyone who can push to the
+  package can put an image under a digest, though only a digest the
+  workflow itself printed is ever deployed.
 
 ### Required: who can deploy
 
@@ -50,29 +55,61 @@ required before `KUBECONFIG_KB` is stored:
   - **Deployment branches and tags:** selected only, with the single rule
     tag `v*`;
   - **Required reviewers:** at least one maintainer;
+  - **Prevent self-review:** on, so whoever pushed the tag or dispatched
+    the run cannot approve it;
   - **Allow administrators to bypass configured protection rules:** off.
+- Environment `image-publish` (the job that pushes to GHCR): **Deployment
+  branches and tags:** selected only, the single rule tag `v*`. No reviewers
+  needed; it keeps `packages: write` off every branch.
 - Environment `github-pages`: add the tag rule `v*` to its deployment
   branches and tags, or the tag-triggered Pages deploy is refused.
 - A **tag ruleset** targeting `v*`: restrict creations, updates and
   deletions to maintainers, with no bypass for anyone else.
+
+Before approving a `production` deployment, the reviewer checks, on the
+run's summary page:
+
+1. the run is for a `v*` tag (a dispatch from a branch is refused by the
+   environment, so anything else means the settings above have drifted);
+2. the tagged commit is on `main`: open the commit and check GitHub shows
+   it on `main`, not only on the tag;
+3. `.github/workflows/deploy.yml` at that commit is the one on `main`,
+   unmodified: `git diff origin/main <tag> -- .github/workflows/deploy.yml`
+   prints nothing.
 
 ## Bootstrap (cluster admin, once)
 
 With an admin kubeconfig:
 
 ```sh
+set -u
 NS=<namespace>                     # same value as K8S_NAMESPACE
 APP_DOMAIN=<host>                  # same value as APP_DOMAIN
 GHCR_OWNER=<owner, lowercase>      # owner of the GitHub repo, e.g. firstchesapeake
 render() {
+  local label='[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?'
+  if [[ "$NS" == *$'\n'* || ! "$NS" =~ ^${label}$ ]] \
+     || [[ "$APP_DOMAIN" == *$'\n'* || ${#APP_DOMAIN} -gt 253 || ! "$APP_DOMAIN" =~ ^${label}(\.${label})+$ ]] \
+     || [[ "$GHCR_OWNER" == *$'\n'* || ! "$GHCR_OWNER" =~ ^[a-z0-9-]+$ ]]; then
+    echo "render: NS, APP_DOMAIN or GHCR_OWNER is not valid; nothing rendered" >&2
+    return 1
+  fi
   sed -e "s|__PROJECT_NAMESPACE__|$NS|g" \
       -e "s|__APP_DOMAIN__|$APP_DOMAIN|g" \
       -e "s|__GHCR_OWNER__|$GHCR_OWNER|g" "$1"
 }
 render k8s-do/bootstrap/namespace.yaml        | kubectl apply -f -
+render k8s-do/bootstrap/network-policy.yaml   | kubectl apply -f -
 render k8s-do/bootstrap/deploy-rbac.yaml      | kubectl apply -f -
 render k8s-do/bootstrap/admission-policy.yaml | kubectl apply -f -
 ```
+
+`render` checks the three values the same way the workflow does (a
+namespace name, a lowercase hostname, a lowercase GitHub owner) and prints
+nothing when one is wrong, so `kubectl apply` gets no objects and applies
+nothing. A cluster bootstrapped before the NetworkPolicies moved here
+already has them (CI applied them); applying them again only takes them
+over.
 
 Re-apply after changing `APP_DOMAIN`: the Ingress policy admits only that
 host, so the next deploy with a new domain is refused until it is.
@@ -86,12 +123,21 @@ What each file sets up:
   meet the `restricted` profile. If the namespace already has pods, check
   them first:
   `kubectl label --dry-run=server --overwrite ns "$NS" pod-security.kubernetes.io/enforce=restricted`.
+  The label only binds if the API server's Pod Security admission
+  configuration exempts nothing that applies here: an exempted username,
+  namespace or RuntimeClass skips `restricted` entirely. Confirm the
+  cluster's `AdmissionConfiguration` (the `PodSecurity` plugin's
+  `exemptions`) is empty, or names nothing in this namespace.
+- `network-policy.yaml`: the namespace's network boundary. Pods accept
+  traffic only from this namespace and from `ingress-nginx`, and send
+  none. CI does not apply it and `kb-deployer` has no access to
+  NetworkPolicies, so the deploy credential cannot open the namespace up.
 - `deploy-rbac.yaml`: the `kb-deployer` ServiceAccount and a Role bound to it
   in that namespace only. The Role grants what applying the app manifests,
   waiting on and undoing a rollout, and failure diagnostics need: create
-  Deployments, Services, Ingresses and NetworkPolicies, update them only by
-  their names in this directory, and read ReplicaSets, Pods and Events. It
-  has no Secrets, ConfigMaps or pod logs, cannot delete anything, and has
+  Deployments, Services and Ingresses, update them only by their names in
+  this directory, and read ReplicaSets, Pods and Events. It has no Secrets,
+  ConfigMaps, NetworkPolicies or pod logs, cannot delete anything, and has
   nothing cluster-scoped.
 - `admission-policy.yaml`: ValidatingAdmissionPolicies that bound what
   `kb-deployer` may write, since RBAC alone cannot. Without them, creating a
@@ -101,25 +147,42 @@ What each file sets up:
   - the Deployment `knowledgebase`, with emptyDir volumes only, the default
     ServiceAccount, `automountServiceAccountToken: false`, images
     `ghcr.io/<owner>/knowledgebase@sha256:<digest>`, literal environment
-    values (no Secret or ConfigMap references) and no command override;
+    values (no Secret or ConfigMap references), no command override, no
+    lifecycle hooks, probes only `httpGet` on `/healthz`, every container
+    with a read-only root filesystem and no privilege escalation, and no
+    say over placement or runtime (no `nodeName`, `nodeSelector`,
+    `affinity`, `tolerations`, `priorityClassName`, `runtimeClassName`,
+    `hostAliases` or ephemeral containers);
   - the Ingress `knowledgebase`, class `nginx`, every host equal to
     `APP_DOMAIN`, TLS in `knowledgebase-tls`, the `letsencrypt-prod`
     ClusterIssuer and no other annotation (in particular no
     `nginx.ingress.kubernetes.io/*`);
-  - the ClusterIP Service `knowledgebase`, and the three NetworkPolicies in
-    `network-policy.yaml`.
+  - the ClusterIP Service `knowledgebase`.
 
   They match only requests made as `kb-deployer`; cert-manager's own
   solver objects and an admin's changes are not affected. cert-manager
   creates the TLS Certificate from the Ingress annotation under its own
   identity.
 
-Check that the policies bite (each `apply` must be refused):
+Check that the policies bite: every command below must be refused (each
+is a server-side dry run, so nothing changes even if one is admitted).
+The patches and the annotation act on the live objects, so run the check
+after the first deploy.
 
 ```sh
 AS="--as=system:serviceaccount:$NS:kb-deployer"
-kubectl -n "$NS" $AS create deployment probe --image=nginx --dry-run=server -o name
-kubectl -n "$NS" $AS create ingress probe --rule="other.example/=knowledgebase:80" --dry-run=server -o name
+D="-n $NS $AS --dry-run=server -o name"
+kubectl $D patch deployment knowledgebase --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"h","hostPath":{"path":"/"}}}]'
+kubectl $D patch deployment knowledgebase --type=json \
+  -p '[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe","value":{"exec":{"command":["id"]}}}]'
+kubectl $D create deployment probe --image=nginx
+kubectl $D create ingress probe --rule="other.example/=knowledgebase:80"
+kubectl $D annotate ingress knowledgebase nginx.ingress.kubernetes.io/server-snippet=x
+kubectl $D patch service knowledgebase -p '{"spec":{"type":"LoadBalancer"}}'
+kubectl $D create -f - <<'EOF'
+{"apiVersion":"networking.k8s.io/v1","kind":"NetworkPolicy","metadata":{"name":"probe"},"spec":{"podSelector":{}}}
+EOF
 ```
 
 ## Build the deploy kubeconfig
@@ -201,8 +264,8 @@ revision deployed by tag before the switch to digests; an admin can.
 
 ## Cutover checklist
 
-1. Deploy (push a version tag, or dispatch the workflow on `main`) while
-   GitHub Pages is still live. Make the GHCR package public if this is the
+1. Deploy (push a version tag, or dispatch the workflow from a `v*` tag;
+   a dispatch from a branch is refused) while GitHub Pages is still live. Make the GHCR package public if this is the
    first push, and re-run the deploy if it failed on the image pull.
 2. Point a DNS record for the `APP_DOMAIN` host at the ingress load balancer.
 3. Wait until the `knowledgebase-tls` Certificate is Ready:

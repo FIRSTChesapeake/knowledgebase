@@ -76,11 +76,29 @@ describe("expressions stay out of shell scripts", () => {
     for (const line of lines) assert.match(line, /@[0-9a-f]{40} # v\d+\.\d+\.\d+$/, line)
   })
 
-  test("no checkout but the guard's keeps the token in .git/config", () => {
-    for (const { job, step } of steps()) {
-      if (!step.uses?.startsWith("actions/checkout@") || job === "guard") continue
-      assert.equal(step.with?.["persist-credentials"], false, job)
-    }
+  test("no checkout keeps the token in .git/config, the guard's included", () => {
+    const checkouts = steps().filter(({ step }) => step.uses?.startsWith("actions/checkout@"))
+    assert.ok(checkouts.some(({ job }) => job === "guard"))
+    for (const { job, step } of checkouts) assert.equal(step.with?.["persist-credentials"], false, job)
+  })
+
+  test("the header says a dispatch must run from a v* tag", () => {
+    assert.match(readText(".github/workflows/deploy.yml"), /dispatch it from the v\* tag \("Use workflow from"\), never from a\n# branch/)
+  })
+})
+
+describe("who can write to the package", () => {
+  test("every job with packages: write runs in a tag-limited environment", () => {
+    const writers = Object.entries(jobs).filter(([, j]) => j.permissions?.packages === "write")
+    assert.deepEqual(writers.map(([name]) => name), ["image"])
+    assert.equal(jobs.image.environment, "image-publish")
+    assert.equal(wf.permissions.packages, undefined, "no workflow-level packages permission")
+  })
+
+  test("the README requires the environment's v* rule and package Actions access", () => {
+    const readme = readText("k8s-do/README.md")
+    assert.match(readme, /Environment `image-publish`[^:]*:\s+\*\*Deployment\s+branches and tags:\*\*\s+selected only, the single rule\s+tag `v\*`\./)
+    assert.match(readme, /\*\*Manage Actions access\*\*: only this repository/)
   })
 })
 
@@ -175,20 +193,61 @@ describe("deploy-cluster job", () => {
     const step = job.steps.find((s: any) => s.name === "Record current revision")
     const dir = scratchDir()
     const env = path.join(dir, "env")
-    // A stand-in kubectl that prints the revision annotation.
-    fs.writeFileSync(path.join(dir, "kubectl"), '#!/bin/sh\nprintf "%s" "$REVISION"\n', { mode: 0o755 })
-    const run = (REVISION: string) => {
+    // A stand-in kubectl: prints the revision annotation, or fails the way
+    // the real one does for a missing Deployment (unless told to ignore
+    // that) and for any other error.
+    fs.writeFileSync(
+      path.join(dir, "kubectl"),
+      [
+        "#!/bin/sh",
+        'case "$MODE" in',
+        '  notfound) case " $* " in *" --ignore-not-found "*) exit 0;; esac',
+        '    echo "Error from server (NotFound): deployments.apps \\"knowledgebase\\" not found" >&2; exit 1;;',
+        '  error) echo "error: You must be logged in to the server (Unauthorized)" >&2; exit 1;;',
+        '  *) printf "%s" "$REVISION";;',
+        "esac",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    )
+    const run = (REVISION: string, MODE = "ok") => {
       fs.writeFileSync(env, "")
-      return runBash(step.run, { NS: "kb", REVISION, GITHUB_ENV: env, PATH: `${dir}:${process.env.PATH}` })
+      return runBash(step.run, { NS: "kb", REVISION, MODE, GITHUB_ENV: env, PATH: `${dir}:${process.env.PATH}` })
     }
     assert.equal(run("7").status, 0)
     assert.equal(fs.readFileSync(env, "utf8"), "BEFORE=7\n")
-    assert.equal(run("").status, 0, "first deploy")
+    assert.equal(run("", "notfound").status, 0, "first deploy: the Deployment is NotFound")
     assert.equal(fs.readFileSync(env, "utf8"), "BEFORE=\n")
+    // Any other error must stop the run, not pass for a first deploy.
+    assert.notEqual(run("", "error").status, 0, "a failed get is not a first deploy")
+    assert.equal(fs.readFileSync(env, "utf8"), "", "nothing written on failure")
     for (const bad of ["7\nLD_PRELOAD=/tmp/x", "7 ", "x"]) {
       assert.notEqual(run(bad).status, 0, JSON.stringify(bad))
       assert.equal(fs.readFileSync(env, "utf8"), "", "nothing written on failure")
     }
+  })
+
+  test("rolls back only to the recorded revision, and not at all on a first deploy", () => {
+    const rollback = job.steps.find((s: any) => /^failure\(\)/.test(s.if ?? ""))
+    const dir = scratchDir()
+    const log = path.join(dir, "calls")
+    fs.writeFileSync(path.join(dir, "kubectl"), '#!/bin/sh\necho "$*" >> "$CALLS"\n', { mode: 0o755 })
+    const run = (BEFORE: string) => {
+      fs.writeFileSync(log, "")
+      const r = runBash(rollback.run, { NS: "kb", BEFORE, CALLS: log, PATH: `${dir}:${process.env.PATH}` })
+      return { status: r.status, undo: fs.readFileSync(log, "utf8").split("\n").filter((l) => l.includes("rollout undo")) }
+    }
+    const later = run("7")
+    assert.equal(later.status, 1, "stays red")
+    assert.deepEqual(later.undo, ["-n kb rollout undo deployment/knowledgebase --to-revision=7"])
+    const first = run("")
+    assert.equal(first.status, 1, "stays red")
+    assert.deepEqual(first.undo, [], "no undo without a recorded revision")
+  })
+
+  test("diagnostics print no pod or node IPs", () => {
+    const rollback = job.steps.find((s: any) => /^failure\(\)/.test(s.if ?? ""))
+    assert.ok(!/-o\s*wide/.test(rollback.run))
   })
 
   test("writes the kubeconfig from the secret with mode 600", () => {

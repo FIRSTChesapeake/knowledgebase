@@ -1,3 +1,7 @@
+# The namespace's network boundary. Applied once by a cluster admin (see
+# k8s-do/README.md), never by CI: kb-deployer has no access to
+# NetworkPolicies, so the deploy credential cannot open the namespace up.
+#
 # Ingress: same-namespace traffic and traffic from ingress-nginx only.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

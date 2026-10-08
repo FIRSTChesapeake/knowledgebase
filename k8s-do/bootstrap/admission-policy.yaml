@@ -1,10 +1,9 @@
 # What the deploy credential may write. Applied once by a cluster admin (see
 # k8s-do/README.md), never by CI.
 #
-# RBAC lets kb-deployer create and patch Deployments, Services, Ingresses and
-# NetworkPolicies, but cannot say what they contain. Without these policies
-# the credential could run any pod spec (and read whatever that pod can
-# reach) or claim any hostname on the shared load balancer and get a
+# RBAC lets kb-deployer create and patch Deployments, Services and Ingresses,
+# but cannot say what they contain. Without these policies the credential
+# could run any pod spec (and read whatever that pod can reach) or claim any hostname on the shared load balancer and get a
 # certificate for it. Each policy matches only requests made as kb-deployer,
 # so cert-manager's own HTTP-01 solver Ingress, Service and pod in this
 # namespace are not affected. Pod Security "restricted" on the namespace
@@ -52,6 +51,32 @@ spec:
       message: "Environment variables must be literal values: no envFrom, no valueFrom."
     - expression: "variables.containers.all(c, !has(c.command) && !has(c.args))"
       message: "Containers run the image's own entrypoint: no command or args."
+    # Lifecycle hooks and exec probes run commands in the container just as
+    # a command override would, and probe output reaches Events. An httpGet
+    # probe with a host is a request from the node to anywhere.
+    - expression: "variables.containers.all(c, !has(c.lifecycle))"
+      message: "No lifecycle hooks."
+    - expression: >-
+        variables.containers.all(c,
+          (!has(c.livenessProbe) || (has(c.livenessProbe.httpGet) && !has(c.livenessProbe.httpGet.host) && c.livenessProbe.httpGet.path == '/healthz'))
+          && (!has(c.readinessProbe) || (has(c.readinessProbe.httpGet) && !has(c.readinessProbe.httpGet.host) && c.readinessProbe.httpGet.path == '/healthz'))
+          && (!has(c.startupProbe) || (has(c.startupProbe.httpGet) && !has(c.startupProbe.httpGet.host) && c.startupProbe.httpGet.path == '/healthz')))
+      message: "Probes may only be httpGet on /healthz of the pod itself."
+    # Pod Security restricted does not require either of these.
+    - expression: >-
+        variables.containers.all(c, has(c.securityContext)
+          && has(c.securityContext.readOnlyRootFilesystem) && c.securityContext.readOnlyRootFilesystem == true
+          && has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false)
+      message: "Every container needs readOnlyRootFilesystem true and allowPrivilegeEscalation false."
+    # Placement and runtime are the scheduler's and the admin's: no pinning
+    # to a node, no tolerating a taint, no preempting other pods, no other
+    # runtime, no rewriting /etc/hosts, no debug containers.
+    - expression: >-
+        !has(variables.pod.nodeName) && !has(variables.pod.nodeSelector)
+        && !has(variables.pod.affinity) && !has(variables.pod.tolerations)
+        && !has(variables.pod.priorityClassName) && !has(variables.pod.runtimeClassName)
+        && !has(variables.pod.hostAliases) && !has(variables.pod.ephemeralContainers)
+      message: "No nodeName, nodeSelector, affinity, tolerations, priorityClassName, runtimeClassName, hostAliases or ephemeralContainers."
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -160,43 +185,6 @@ metadata:
     app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
 spec:
   policyName: __PROJECT_NAMESPACE__-kb-deployer-services
-  validationActions: [Deny]
-  matchResources:
-    namespaceSelector:
-      matchLabels:
-        kubernetes.io/metadata.name: __PROJECT_NAMESPACE__
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  name: __PROJECT_NAMESPACE__-kb-deployer-networkpolicies
-  labels:
-    app.kubernetes.io/name: knowledgebase
-    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
-spec:
-  failurePolicy: Fail
-  matchConstraints:
-    resourceRules:
-      - apiGroups: ["networking.k8s.io"]
-        apiVersions: ["*"]
-        operations: ["CREATE", "UPDATE"]
-        resources: ["networkpolicies"]
-  matchConditions:
-    - name: deploy-credential-only
-      expression: "request.userInfo.username == 'system:serviceaccount:__PROJECT_NAMESPACE__:kb-deployer'"
-  validations:
-    - expression: "object.metadata.name in ['default-namespace-isolation', 'allow-acme-solver', 'default-deny-egress']"
-      message: "kb-deployer may only write the NetworkPolicies in k8s-do/network-policy.yaml."
----
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicyBinding
-metadata:
-  name: __PROJECT_NAMESPACE__-kb-deployer-networkpolicies
-  labels:
-    app.kubernetes.io/name: knowledgebase
-    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
-spec:
-  policyName: __PROJECT_NAMESPACE__-kb-deployer-networkpolicies
   validationActions: [Deny]
   matchResources:
     namespaceSelector:

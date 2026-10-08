@@ -1,14 +1,16 @@
 name: Deploy knowledgebase
 
 # Publishing is tag-driven: merging to main changes nothing on the live site
-# until a version tag (vX.Y.Z) is pushed. workflow_dispatch allows a manual
-# re-publish; either way, only a commit already on main may deploy.
+# until a version tag (vX.Y.Z) is pushed. workflow_dispatch re-publishes a
+# version: dispatch it from the v* tag ("Use workflow from"), never from a
+# branch; the production and image-publish environments refuse any other
+# ref. Either way, only a commit already on main may deploy.
 #
 # The guard job below runs from the workflow file at the deployed ref, so a
 # tag on an unmerged commit could carry an edited copy of it. It is a safety
 # net; the security control is the repo settings in k8s-do/README.md
-# (production environment limited to v* tags with required reviewers, and a
-# tag ruleset on v*).
+# (production and image-publish environments limited to v* tags, required
+# reviewers on production, and a tag ruleset on v*).
 #
 # One run publishes to both GitHub Pages (build, deploy) and the Kubernetes
 # cluster (image, deploy-cluster). Every job needs guard, directly or
@@ -25,9 +27,11 @@ jobs:
   guard:
     runs-on: ubuntu-22.04
     steps:
+      # The repo is public: fetching main needs no token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       # Only commits already merged to main may deploy, whether by tag push or
       # workflow_dispatch from any branch. deploy needs this job, so a failure
       # here stops the publish. Fails closed: a missing origin/main is a
@@ -95,10 +99,12 @@ jobs:
   # Builds the site into an nginx image (see Dockerfile) and pushes it to
   # GHCR tagged :sha-<commit> and with the version tag. Tags can be moved by
   # a later push, so the job's output is the pushed digest, and the cluster
-  # deploys by digest.
+  # deploys by digest. The image-publish environment (v* tags only, no
+  # reviewers) keeps packages: write off any other ref.
   image:
     needs: guard
     runs-on: ubuntu-22.04
+    environment: image-publish
     permissions:
       contents: read
       packages: write
@@ -241,8 +247,15 @@ jobs:
           fi
       - name: Record current revision
         run: |
-          before="$(kubectl -n "$NS" get deployment knowledgebase \
-            -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
+          # Only a missing Deployment (NotFound, which --ignore-not-found
+          # turns into empty output) is a first deploy. Any other error
+          # (expired token, unreachable API server) stops the run here,
+          # before anything is applied.
+          if ! before="$(kubectl -n "$NS" get deployment knowledgebase --ignore-not-found \
+            -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')"; then
+            echo "::error::Could not read deployment/knowledgebase; nothing was applied."
+            exit 1
+          fi
           # Empty on the first deploy; otherwise a revision number, and
           # nothing else may reach GITHUB_ENV.
           if [[ -n "$before" && ! "$before" =~ ^[0-9]+$ ]]; then
@@ -253,7 +266,6 @@ jobs:
       - name: Apply manifests
         id: apply
         run: |
-          kubectl -n "$NS" apply -f k8s-do-rendered/network-policy.yaml
           kubectl -n "$NS" apply -f k8s-do-rendered/service.yaml
           kubectl -n "$NS" apply -f k8s-do-rendered/deployment.yaml
           kubectl -n "$NS" apply -f k8s-do-rendered/ingress.yaml
@@ -262,17 +274,19 @@ jobs:
         run: kubectl -n "$NS" rollout status deployment/knowledgebase --timeout=300s
       # Only once the apply has run: an earlier failure changed nothing on
       # the cluster, and an undo then would roll back the healthy release.
-      # No pod logs: the access log holds visitor IPs and this run log is
-      # public.
+      # Nothing but the recorded revision is undone to: with no BEFORE (the
+      # first deploy) there is nothing to roll back to. This run log is
+      # public: no pod logs (the access log holds visitor IPs) and no pod or
+      # node IPs.
       - name: Diagnose and roll back
         if: failure() && (steps.apply.outcome == 'failure' || steps.rollout.outcome == 'failure')
         run: |
-          kubectl -n "$NS" get pods -l app.kubernetes.io/name=knowledgebase -o wide || true
+          kubectl -n "$NS" get pods -l app.kubernetes.io/name=knowledgebase || true
           kubectl -n "$NS" describe deployment knowledgebase || true
           kubectl -n "$NS" get events --sort-by=.lastTimestamp | tail -n 30 || true
           if [ -n "${BEFORE:-}" ]; then
             kubectl -n "$NS" rollout undo deployment/knowledgebase --to-revision="$BEFORE" || true
           else
-            kubectl -n "$NS" rollout undo deployment/knowledgebase || true
+            echo "::warning::First deploy: no earlier revision to roll back to."
           fi
           exit 1

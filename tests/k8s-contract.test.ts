@@ -1,13 +1,19 @@
 // Contract tests for the Kubernetes manifests in k8s-do/.
 import { describe, test } from "node:test"
 import assert from "node:assert/strict"
+import fs from "node:fs"
+import path from "node:path"
 import {
+  BAD_DOMAINS,
+  GOOD_DOMAINS,
   appManifests,
   bootstrapManifests,
   listFiles,
   loadYamlDocs,
   readText,
   renderedPlaceholders,
+  runBash,
+  scratchDir,
   walkFiles,
 } from "./helpers.ts"
 
@@ -18,7 +24,6 @@ const RESOURCE: Record<string, string> = {
   Deployment: "deployments",
   Service: "services",
   Ingress: "ingresses",
-  NetworkPolicy: "networkpolicies",
 }
 
 // The placeholders the README's bootstrap render() substitutes.
@@ -187,7 +192,9 @@ describe("non-root, read-only root, limits set", () => {
 })
 
 describe("network policy shape", () => {
-  const policies = ofKind("NetworkPolicy").map(({ doc }) => doc)
+  const policies = bootstrapManifests()
+    .filter(({ doc }) => doc.kind === "NetworkPolicy")
+    .map(({ doc }) => doc)
   const fromIngressNginx = (rule: any) =>
     rule.from?.some(
       (f: any) => f.namespaceSelector?.matchLabels?.["kubernetes.io/metadata.name"] === "ingress-nginx",
@@ -222,6 +229,14 @@ describe("network policy shape", () => {
   test("no policy admits from the cert-manager namespace", () => {
     assert.ok(!JSON.stringify(policies).includes('"cert-manager"'))
   })
+
+  test("NetworkPolicies are the admin's: bootstrap only, out of CI and the Role", () => {
+    assert.equal(policies.length, 3)
+    assert.deepEqual(ofKind("NetworkPolicy"), [], "no NetworkPolicy among the CI-applied manifests")
+    const role = loadYamlDocs("k8s-do/bootstrap/deploy-rbac.yaml").find((d) => d.kind === "Role")
+    for (const rule of role.rules) assert.ok(!rule.resources.includes("networkpolicies"), String(rule.resources))
+    assert.ok(!readText(".github/workflows/deploy.yml").includes("network-policy"))
+  })
 })
 
 describe("bootstrap stays out of CI and stays narrow", () => {
@@ -230,7 +245,7 @@ describe("bootstrap stays out of CI and stays narrow", () => {
     assert.ok(!text.includes("k8s-do/bootstrap"))
     assert.ok(!/cp -r k8s-do|cp -R k8s-do/.test(text), "render must copy top-level files only")
     for (const line of text.split("\n").filter((l) => l.includes("kubectl") && l.includes("apply"))) {
-      assert.match(line, /k8s-do-rendered\/(network-policy|service|deployment|ingress)\.yaml/, line)
+      assert.match(line, /k8s-do-rendered\/(service|deployment|ingress)\.yaml/, line)
     }
   })
 
@@ -377,7 +392,7 @@ describe("the deploy credential is bounded by the cluster, not only by RBAC", ()
   test("each policy matches exactly the deploy credential", () => {
     // Not cert-manager: its HTTP-01 solver creates its own Ingress, Service
     // and pod in this namespace.
-    assert.equal(policies.length, 4)
+    assert.equal(policies.length, 3)
     for (const p of policies) {
       assert.deepEqual(p.spec.matchConditions, [
         { name: "deploy-credential-only", expression: `request.userInfo.username == '${DEPLOYER}'` },
@@ -402,6 +417,37 @@ describe("the deploy credential is bounded by the cluster, not only by RBAC", ()
     }
     const vars = policyFor("apps", "deployments").spec.variables
     assert.ok(vars.find((v: any) => v.name === "containers").expression.includes("initContainers"), "init containers are checked too")
+  })
+
+  test("Deployments: no lifecycle hooks, httpGet /healthz probes only, read-only root, no escalation", () => {
+    const e = expressions(policyFor("apps", "deployments")).join("\n")
+    assert.ok(e.includes("variables.containers.all(c, !has(c.lifecycle))"), "lifecycle")
+    for (const probe of ["livenessProbe", "readinessProbe", "startupProbe"]) {
+      const needle = `(!has(c.${probe}) || (has(c.${probe}.httpGet) && !has(c.${probe}.httpGet.host) && c.${probe}.httpGet.path == '/healthz'))`
+      assert.ok(e.includes(needle), probe)
+    }
+    assert.ok(e.includes("has(c.securityContext.readOnlyRootFilesystem) && c.securityContext.readOnlyRootFilesystem == true"))
+    assert.ok(e.includes("has(c.securityContext.allowPrivilegeEscalation) && c.securityContext.allowPrivilegeEscalation == false"))
+    // The app's own Deployment must still pass.
+    const [{ doc: dep }] = appManifests().filter(({ doc }) => doc.kind === "Deployment")
+    for (const c of dep.spec.template.spec.containers) {
+      assert.equal(c.lifecycle, undefined)
+      for (const probe of ["livenessProbe", "readinessProbe", "startupProbe"]) {
+        if (!c[probe]) continue
+        assert.equal(c[probe].httpGet?.path, "/healthz", probe)
+        assert.equal(c[probe].httpGet.host, undefined, probe)
+      }
+      assert.equal(c.securityContext.readOnlyRootFilesystem, true)
+      assert.equal(c.securityContext.allowPrivilegeEscalation, false)
+    }
+  })
+
+  test("Deployments: no say over placement, priority, runtime, /etc/hosts or debug containers", () => {
+    const e = expressions(policyFor("apps", "deployments")).join("\n")
+    const fields = ["nodeName", "nodeSelector", "affinity", "tolerations", "priorityClassName", "runtimeClassName", "hostAliases", "ephemeralContainers"]
+    for (const f of fields) assert.ok(e.includes(`!has(variables.pod.${f})`), f)
+    const [{ doc: dep }] = appManifests().filter(({ doc }) => doc.kind === "Deployment")
+    for (const f of fields) assert.equal(dep.spec.template.spec[f], undefined, f)
   })
 
   test("Deployments: the image pattern admits a digest and refuses tags and other repos", () => {
@@ -450,20 +496,11 @@ describe("the deploy credential is bounded by the cluster, not only by RBAC", ()
     for (const r of doc.spec.rules) for (const p of r.http.paths) assert.equal(p.backend.service.name, "knowledgebase")
   })
 
-  test("Services and NetworkPolicies: only the names CI applies, ClusterIP only", () => {
+  test("Services: only knowledgebase, ClusterIP only", () => {
     const svc = expressions(policyFor("", "services")).join("\n")
     assert.ok(svc.includes("object.metadata.name == 'knowledgebase'"))
     assert.ok(svc.includes("object.spec.type == 'ClusterIP'"))
     assert.ok(svc.includes("externalIPs"))
-    const np = expressions(policyFor("networking.k8s.io", "networkpolicies")).join("\n")
-    const listed = /object\.metadata\.name in \[([^\]]+)\]/.exec(np)?.[1]
-    assert.ok(listed, "a name allowlist")
-    const names = [...listed.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort()
-    const applied = appManifests()
-      .filter(({ doc }) => doc.kind === "NetworkPolicy")
-      .map(({ doc }) => doc.metadata.name)
-      .sort()
-    assert.deepEqual(names, applied)
   })
 
   test("the docs no longer claim RBAC alone keeps Secrets out of reach", () => {
@@ -490,9 +527,81 @@ describe("who may deploy is documented as required repo settings", () => {
     assert.match(section, /Environment `github-pages`: add the tag rule `v\*`/)
   })
 
+  test("production needs a reviewer other than whoever started the run", () => {
+    assert.match(section, /\*\*Prevent self-review:\*\* on/)
+  })
+
+  test("the reviewer checklist covers the tag, main and an unmodified workflow", () => {
+    const list = section.slice(section.indexOf("Before approving a `production` deployment"))
+    assert.match(list, /run is for a `v\*` tag/)
+    assert.match(list, /tagged commit is on `main`/)
+    assert.match(list, /git diff origin\/main <tag> -- \.github\/workflows\/deploy\.yml/)
+  })
+
+  test("the cutover dispatches from a v* tag, never a branch", () => {
+    const step = readme.slice(readme.indexOf("## Cutover checklist"))
+    assert.match(step, /1\. Deploy \(push a version tag, or dispatch the workflow from a `v\*` tag;/)
+    assert.ok(!/dispatch the workflow on `main`/.test(readme))
+  })
+
   test("the in-workflow guard is called a safety net, not the control", () => {
     assert.match(section, /The guard is a safety\s+net, not the security control/)
     assert.match(readText(".github/workflows/deploy.yml"), /It is a safety\n# net; the security control is the repo settings/)
+  })
+})
+
+describe("the README's bootstrap render() checks its inputs", () => {
+  const readme = readText("k8s-do/README.md")
+  const start = readme.indexOf("render() {")
+  const fn = readme.slice(start, readme.indexOf("\n}", start) + 2)
+  const dir = scratchDir()
+  const file = path.join(dir, "in.yaml")
+  fs.writeFileSync(file, "ns: __PROJECT_NAMESPACE__\nhost: __APP_DOMAIN__\nowner: __GHCR_OWNER__\n")
+  const good = { NS: "kb", APP_DOMAIN: "kb.example.org", GHCR_OWNER: "firstchesapeake" }
+  const render = (vals: Record<string, string>) => runBash(`${fn}\nrender "$F"`, { ...vals, F: file })
+
+  test("runs under set -u", () => {
+    assert.match(readme.slice(readme.lastIndexOf("```sh", start), start), /^set -u$/m)
+  })
+
+  test("renders good values", () => {
+    const r = render(good)
+    assert.equal(r.status, 0, r.stderr)
+    assert.equal(r.stdout, "ns: kb\nhost: kb.example.org\nowner: firstchesapeake\n")
+    for (const APP_DOMAIN of GOOD_DOMAINS) assert.equal(render({ ...good, APP_DOMAIN }).status, 0, APP_DOMAIN)
+  })
+
+  test("prints nothing and fails for a bad namespace, domain or owner", () => {
+    const bad: Record<string, string>[] = [
+      ...BAD_DOMAINS.map((APP_DOMAIN) => ({ ...good, APP_DOMAIN })),
+      ...["", "KB", "kb_x", "kb|x", "kb\n", "-kb", "kb.x", "a".repeat(64)].map((NS) => ({ ...good, NS })),
+      ...["", "FirstChesapeake", "first|x", "first/x", "first.x", "first\n"].map((GHCR_OWNER) => ({ ...good, GHCR_OWNER })),
+    ]
+    for (const vals of bad) {
+      const r = render(vals)
+      assert.notEqual(r.status, 0, JSON.stringify(vals))
+      assert.equal(r.stdout, "", JSON.stringify(vals))
+    }
+  })
+})
+
+describe("the bootstrap docs cover what the manifests cannot", () => {
+  const readme = readText("k8s-do/README.md")
+
+  test("the admin is told to confirm no Pod Security exemptions apply", () => {
+    assert.match(readme, /exempted username,\s+namespace or RuntimeClass skips `restricted` entirely/)
+    assert.match(readme, /`AdmissionConfiguration`/)
+  })
+
+  test("the smoke check tries a breadth of refused writes", () => {
+    const block = readme.slice(readme.indexOf("Check that the policies bite"), readme.indexOf("## Build the deploy kubeconfig"))
+    for (const needle of ["hostPath", '"exec"', "create deployment probe", "other.example", "server-snippet", "LoadBalancer", '"kind":"NetworkPolicy"']) {
+      assert.ok(block.includes(needle), needle)
+    }
+    for (const line of block.split("\n").filter((l) => l.startsWith("kubectl "))) {
+      assert.match(line, /^kubectl \$D /, "every probe is a server-side dry run as kb-deployer")
+    }
+    assert.match(block, /^D="-n \$NS \$AS --dry-run=server -o name"$/m)
   })
 })
 
