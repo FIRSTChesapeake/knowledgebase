@@ -1,4 +1,7 @@
 # Applied once by a cluster admin (see k8s-do/README.md), never by CI.
+# Pod Security "restricted" is enforced: no privileged, host-namespace or
+# hostPath pods, whoever creates them. The deploy credential cannot change
+# these labels (it has no access to Namespaces).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -6,3 +9,56 @@ metadata:
   labels:
     app.kubernetes.io/name: knowledgebase
     app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.34
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+# Bounds what any workload in the namespace can take. Sized for the
+# Deployment's two replicas plus a surge pod, and cert-manager's HTTP-01
+# solver (one pod and one Service per challenge).
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: knowledgebase
+  namespace: __PROJECT_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: knowledgebase
+    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+spec:
+  hard:
+    pods: "6"
+    requests.cpu: 300m
+    requests.memory: 512Mi
+    limits.cpu: "1"
+    limits.memory: 1Gi
+    requests.storage: "0"
+    persistentvolumeclaims: "0"
+    services: "4"
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+---
+# Defaults for containers that set no resources (the quota requires them),
+# and a ceiling per container.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: knowledgebase
+  namespace: __PROJECT_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: knowledgebase
+    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 10m
+        memory: 32Mi
+      default:
+        cpu: 100m
+        memory: 64Mi
+      max:
+        cpu: 250m
+        memory: 256Mi

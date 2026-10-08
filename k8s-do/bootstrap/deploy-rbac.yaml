@@ -1,6 +1,7 @@
 # The deploy workflow's identity: a ServiceAccount confined to this
 # namespace. Applied once by a cluster admin (see k8s-do/README.md), never
-# by CI. Its token is the credential in the KUBECONFIG_KB secret.
+# by CI. A time-bound token for it (kubectl create token --duration) is the
+# credential in the KUBECONFIG_KB secret; there is no long-lived token Secret.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -11,24 +12,13 @@ metadata:
     app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
 automountServiceAccountToken: false
 ---
-# Long-lived token. Rotate by deleting this Secret and applying the file
-# again; the old token dies with the Secret.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: kb-deployer-token
-  namespace: __PROJECT_NAMESPACE__
-  labels:
-    app.kubernetes.io/name: knowledgebase
-    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
-  annotations:
-    kubernetes.io/service-account.name: kb-deployer
-type: kubernetes.io/service-account-token
----
 # Only what `kubectl apply` of the app manifests, rollout status/undo and
-# failure diagnostics need. No secrets, no delete, nothing cluster-scoped:
-# the app has no ConfigMaps, Secrets or Jobs, and cert-manager creates the
-# Certificate from the Ingress annotation under its own identity.
+# failure diagnostics need. No Secrets, no pod logs, no delete, nothing
+# cluster-scoped: the app has no ConfigMaps, Secrets or Jobs, and
+# cert-manager creates the Certificate from the Ingress annotation under its
+# own identity. RBAC cannot limit create by name or content; the admission
+# policies in admission-policy.yaml do, so this Role is only as narrow as
+# they are.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -40,18 +30,34 @@ metadata:
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "watch", "create", "update", "patch"]
+    verbs: ["get", "list", "watch", "create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["knowledgebase"]
+    verbs: ["update", "patch"]
   - apiGroups: ["apps"]
     resources: ["replicasets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["services"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: ["knowledgebase"]
+    verbs: ["update", "patch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses", "networkpolicies"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    resourceNames: ["knowledgebase"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    resourceNames: ["default-namespace-isolation", "allow-acme-solver", "default-deny-egress"]
+    verbs: ["update", "patch"]
   - apiGroups: [""]
-    resources: ["pods", "pods/log", "events"]
+    resources: ["pods", "events"]
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

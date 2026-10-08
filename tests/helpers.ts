@@ -1,4 +1,6 @@
+import { spawnSync } from "node:child_process"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { parseAllDocuments, parse } from "yaml"
@@ -52,6 +54,58 @@ export function appManifests(): { file: string; doc: any }[] {
   return listFiles("k8s-do", ".yaml").flatMap((file) =>
     loadYamlDocs(file).map((doc) => ({ file, doc })),
   )
+}
+
+// Hand-applied manifests in k8s-do/bootstrap/.
+export function bootstrapManifests(): { file: string; doc: any }[] {
+  return listFiles("k8s-do/bootstrap", ".yaml").flatMap((file) =>
+    loadYamlDocs(file).map((doc) => ({ file, doc })),
+  )
+}
+
+// Runs a script the way a GitHub Actions `run:` step does (bash -e), with
+// only the given environment plus PATH.
+export function runBash(
+  script: string,
+  env: Record<string, string>,
+): { status: number | null; stdout: string; stderr: string } {
+  const r = spawnSync("bash", ["-e", "-c", script], {
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", ...env },
+    encoding: "utf8",
+  })
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr }
+}
+
+// APP_DOMAIN values every validation must refuse: a second line (which
+// build-args would read as an argument of its own), labels and names over
+// the DNS limits, and characters that would break the sed render.
+export const BAD_DOMAINS: string[] = [
+  "",
+  "kb",
+  "kb.example.org\nBUILDKIT_SYNTAX=evil/frontend",
+  "kb.example.org\n",
+  "\nkb.example.org",
+  "KB.example.org",
+  "kb.example.org|x",
+  "kb.example.org/x",
+  "kb.example.org&",
+  "-kb.example.org",
+  "kb..example.org",
+  `${"a".repeat(64)}.example.org`,
+  `${"a.".repeat(126)}org`, // 255 characters
+]
+export const GOOD_DOMAINS: string[] = [
+  "kb.example.org",
+  "kb.test.invalid",
+  `${"a".repeat(63)}.example.org`,
+  `${"a.".repeat(125)}org`, // 253 characters
+]
+
+// A fresh temporary directory, removed when the test process exits.
+export function scratchDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kb-contract-"))
+  process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }))
+  return dir
 }
 
 export function deployWorkflow(): any {

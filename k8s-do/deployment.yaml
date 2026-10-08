@@ -1,6 +1,6 @@
 # Static knowledgebase site: nginx serving the Quartz build baked into the
-# image. __IMAGE__ is rendered by the deploy workflow to the immutable
-# :sha-<commit> tag, so applying this file is the deploy.
+# image. __IMAGE__ is rendered by the deploy workflow to the image pinned
+# by the digest it just pushed, so applying this file is the deploy.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
