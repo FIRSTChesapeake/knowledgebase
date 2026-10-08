@@ -263,6 +263,38 @@ describe("deploy-cluster job", () => {
     assert.ok(!/echo[^\n]*KUBECONFIG_B64/.test(step.run), "never echoes the kubeconfig")
   })
 
+  test("checks the deploy token's expiry, read through env, before using the kubeconfig", () => {
+    const i = job.steps.findIndex((s: any) => s.name === "Check deploy token expiry")
+    assert.ok(i >= 0)
+    const step = job.steps[i]
+    assert.equal(step.env.KUBECONFIG_KB_EXPIRES, "${{ vars.KUBECONFIG_KB_EXPIRES }}")
+    assert.ok(i < job.steps.findIndex((s: any) => s.env?.KUBECONFIG_B64), "runs before the kubeconfig is written")
+    assert.ok(i < job.steps.findIndex((s: any) => s.id === "apply"), "runs before anything is applied")
+
+    const at = (days: number) => new Date(Date.now() + days * 86400_000).toISOString().replace(/\.\d{3}Z$/, "Z")
+    const check = (value: string) => {
+      const r = runBash(step.run, { KUBECONFIG_KB_EXPIRES: value })
+      return { status: r.status, out: r.stdout + r.stderr }
+    }
+    const later = check(at(30))
+    assert.equal(later.status, 0)
+    assert.ok(!later.out.includes("::warning::"), later.out)
+    const soon = check(at(5))
+    assert.equal(soon.status, 0)
+    assert.match(soon.out, /^::warning::The deploy token \(KUBECONFIG_KB\) expires .* in [45] days/m)
+    const expired = check(at(-1))
+    assert.equal(expired.status, 1)
+    assert.match(expired.out, /^::error::The deploy token \(KUBECONFIG_KB\) expired at /m)
+    const unset = check("")
+    assert.equal(unset.status, 0)
+    assert.match(unset.out, /^::warning::Repo variable KUBECONFIG_KB_EXPIRES is not set/m)
+    for (const bad of ["2030-01-01", `${at(30)}\n`, `${at(30)}\nX=1`, "2030-13-01T00:00:00Z", "tomorrow", "2030-01-01T00:00:00+01:00"]) {
+      const r = check(bad)
+      assert.equal(r.status, 1, JSON.stringify(bad))
+      assert.match(r.out, /^::error::Repo variable KUBECONFIG_KB_EXPIRES must be/m, JSON.stringify(bad))
+    }
+  })
+
   test("fails on unrendered placeholders", () => {
     assert.ok(runOf((s) => s.name === "Render manifests").includes("grep -rl '__[A-Z_]*__' k8s-do-rendered"))
   })

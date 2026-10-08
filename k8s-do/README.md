@@ -32,8 +32,17 @@ committed `quartz.config.yaml` keeps the GitHub Pages `baseUrl`.
 
 ## GitHub settings
 
-- Repo variables: `APP_DOMAIN` (the site's hostname) and `K8S_NAMESPACE`.
+- Repo variables: `APP_DOMAIN` (the site's hostname), `K8S_NAMESPACE`, and
+  `KUBECONFIG_KB_EXPIRES` (the deploy token's expiry, set with it; see below).
 - Environment `production` with the secret `KUBECONFIG_KB` (see below).
+
+These are pushed from an ignored `.env`: copy `.env.example` to `.env`,
+fill it in, and run `scripts/upload-github-secrets.sh` (needs `gh`, logged
+in with admin rights on the repo). It sets the two repo variables and skips
+any value left empty with a warning. `KUBECONFIG_KB` is set by
+`scripts/rotate-deploy-token.sh` (below), or by the upload script from a
+kubeconfig built by hand when `KUBECONFIG_KB_FILE` names it. The settings
+that follow are made in the GitHub UI.
 - The GHCR package `knowledgebase` is **public**, so the cluster pulls it with
   no pull secret. A new package starts private: after the first push, set its
   visibility to public in the package settings, then re-run the deploy.
@@ -220,8 +229,23 @@ EOF
 
 ## Build the deploy kubeconfig
 
-The credential is a time-bound token (there is no long-lived token Secret).
-90 days here; pick what suits the rotation calendar.
+The credential is a time-bound token (there is no long-lived token Secret),
+90 days by default. With the admin kubeconfig at hand and `.env` filled in
+(`K8S_NAMESPACE`; `KB_ADMIN_KUBECONFIG` / `KB_ADMIN_CONTEXT` when the admin
+context is not kubectl's default; `KB_TOKEN_DURATION` to change the
+lifetime), one command does all of this section:
+
+```sh
+scripts/rotate-deploy-token.sh
+```
+
+It mints the token, builds the kubeconfig below in a private temp directory
+(removed on exit), runs the three `can-i` checks and uploads nothing unless
+they pass, prints the token's real expiry, and stores the kubeconfig as
+`KUBECONFIG_KB` and the expiry as `KUBECONFIG_KB_EXPIRES`. Neither the
+token nor the kubeconfig is printed.
+
+By hand, as a fallback:
 
 ```sh
 SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
@@ -253,12 +277,18 @@ EOF
 kubectl --kubeconfig kb-deployer.kubeconfig auth can-i patch deployments/knowledgebase   # yes
 kubectl --kubeconfig kb-deployer.kubeconfig auth can-i get secrets                       # no
 kubectl --kubeconfig kb-deployer.kubeconfig auth can-i get pods --subresource=log        # no
-base64 -w0 kb-deployer.kubeconfig    # paste into the KUBECONFIG_KB environment secret
+KUBECONFIG_KB_FILE=kb-deployer.kubeconfig scripts/upload-github-secrets.sh
 rm kb-deployer.kubeconfig
 ```
 
-The API server may cap the duration below what was asked. Check the
-token's real expiry, and put it in the rotation calendar:
+The upload script reads the token's expiry from the file, stores it as
+`KUBECONFIG_KB_EXPIRES` along with the secret, and refuses an expired
+token. Without `gh`: paste `base64 -w0 kb-deployer.kubeconfig` into the
+`KUBECONFIG_KB` environment secret, and set the repo variable
+`KUBECONFIG_KB_EXPIRES` to the expiry as `YYYY-MM-DDTHH:MM:SSZ` (UTC).
+
+The API server may cap the duration below what was asked. The token's
+real expiry, in seconds since the epoch:
 
 ```sh
 cut -d. -f2 <<<"$TOKEN" | tr '_-' '/+' | base64 -d 2>/dev/null | grep -o '"exp":[0-9]*'
@@ -266,9 +296,12 @@ cut -d. -f2 <<<"$TOKEN" | tr '_-' '/+' | base64 -d 2>/dev/null | grep -o '"exp":
 
 ## Rotate the deploy token
 
-Before the token expires (a deploy with an expired token fails at the
-first `kubectl` call and changes nothing), build a new kubeconfig as above
-and replace `KUBECONFIG_KB`. To cut off every token issued so far at once
+Run `scripts/rotate-deploy-token.sh` again before the token expires. The
+deploy job checks `KUBECONFIG_KB_EXPIRES` first: from 14 days before the
+expiry every run warns, and once the token has expired the run fails
+with a message saying so, before anything is applied. Without the variable
+it warns that the expiry is unknown. Renewing does not revoke the old
+token; it stays valid until its own expiry. To cut off every token issued so far at once
 (a leaked token), recreate the ServiceAccount: tokens are bound to its UID.
 
 ```sh
@@ -276,7 +309,7 @@ kubectl -n "$NS" delete serviceaccount kb-deployer
 render k8s-do/bootstrap/deploy-rbac.yaml | kubectl apply -f -
 ```
 
-then build and store a new kubeconfig. A cluster bootstrapped before the
+then run `scripts/rotate-deploy-token.sh`. A cluster bootstrapped before the
 switch to time-bound tokens still has a `kb-deployer-token` Secret holding a
 token that never expires; delete it:
 `kubectl -n "$NS" delete secret kb-deployer-token --ignore-not-found`.
