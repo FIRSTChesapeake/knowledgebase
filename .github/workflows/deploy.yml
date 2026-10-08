@@ -1,30 +1,27 @@
-name: Deploy Quartz site to GitHub Pages
- 
+name: Deploy knowledgebase
+
 # Publishing is tag-driven: merging to main changes nothing on the live site
 # until a version tag (vX.Y.Z) is pushed. workflow_dispatch allows a manual
 # re-publish; either way, only a commit already on main may deploy.
+#
+# One run publishes to both GitHub Pages (build, deploy) and the Kubernetes
+# cluster (image, deploy-cluster). Every job needs guard, directly or
+# through another job.
 on:
   push:
     tags: ['v[0-9]*.[0-9]*.[0-9]*']
   workflow_dispatch:
 
- 
 permissions:
   contents: read
-  pages: write
-  id-token: write
- 
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
- 
+
 jobs:
-  build:
+  guard:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # Fetch all history for git info
+          fetch-depth: 0
       # Only commits already merged to main may deploy, whether by tag push or
       # workflow_dispatch from any branch. deploy needs this job, so a failure
       # here stops the publish. Fails closed: a missing origin/main is a
@@ -43,6 +40,17 @@ jobs:
             exit 1
           fi
           echo "Commit ${DEPLOY_SHA} is on main."
+
+  build:
+    needs: guard
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Fetch all history for git info
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -59,9 +67,15 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: public
- 
+
   deploy:
     needs: build
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -71,3 +85,149 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v5
 
+  # Builds the site into an nginx image (see Dockerfile) and pushes it to
+  # GHCR under an immutable :sha-<commit> tag, plus the version tag.
+  image:
+    needs: guard
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.tags.outputs.image }}
+    steps:
+      # Full history: Quartz reads page dates from git inside the build.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Validate APP_DOMAIN
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        run: |
+          if ! printf '%s' "$APP_DOMAIN" | grep -Eqx '[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+'; then
+            echo "::error::Repo variable APP_DOMAIN must be set to a lowercase hostname."
+            exit 1
+          fi
+      - name: Compute image tags
+        id: tags
+        run: |
+          owner_lower="${GITHUB_REPOSITORY_OWNER,,}"
+          repo="ghcr.io/${owner_lower}/knowledgebase"
+          image="${repo}:sha-${GITHUB_SHA::12}"
+          tags="$image"
+          # The version tag joins a comma-separated list: admit only a plain
+          # version, so a tag name can't add tags of its own.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*'; then
+              echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
+              exit 1
+            fi
+            tags="${tags},${repo}:${GITHUB_REF_NAME}"
+          fi
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      # context: . builds from the checkout above (with .git); the action's
+      # default Git context would clone without history. No registry cache:
+      # it would push the builder stage, .git included.
+      - name: Build and push
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            APP_DOMAIN=${{ vars.APP_DOMAIN }}
+
+  # Renders k8s-do/*.yaml and applies it with the namespace-scoped
+  # kb-deployer credential. The bootstrap/ manifests are applied by hand,
+  # never here. A failed rollout is rolled back.
+  deploy-cluster:
+    needs: [image]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    environment:
+      name: production
+      url: https://${{ vars.APP_DOMAIN }}
+    concurrency:
+      group: knowledgebase-cluster
+      cancel-in-progress: false
+    env:
+      NS: ${{ vars.K8S_NAMESPACE }}
+      APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+      IMAGE: ${{ needs.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate inputs
+        run: |
+          fail=0
+          if ! printf '%s' "$NS" | grep -Eqx '[a-z0-9]([a-z0-9-]*[a-z0-9])?'; then
+            echo "::error::Repo variable K8S_NAMESPACE must be set to a namespace name."
+            fail=1
+          fi
+          if ! printf '%s' "$APP_DOMAIN" | grep -Eqx '[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+'; then
+            echo "::error::Repo variable APP_DOMAIN must be set to a lowercase hostname."
+            fail=1
+          fi
+          if ! printf '%s' "$IMAGE" | grep -Eqx 'ghcr\.io/[a-z0-9._/-]+:sha-[0-9a-f]{12}'; then
+            echo "::error::Unexpected image reference '${IMAGE}'."
+            fail=1
+          fi
+          exit "$fail"
+      - name: Write kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_KB }}
+        run: |
+          if [ -z "$KUBECONFIG_B64" ]; then
+            echo "::error::Environment secret KUBECONFIG_KB is not set."
+            exit 1
+          fi
+          mkdir -p ~/.kube
+          printf '%s' "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+      - name: Render manifests
+        run: |
+          rm -rf k8s-do-rendered
+          mkdir k8s-do-rendered
+          cp k8s-do/*.yaml k8s-do-rendered/
+          sed -i \
+            -e "s|__PROJECT_NAMESPACE__|$NS|g" \
+            -e "s|__APP_DOMAIN__|$APP_DOMAIN|g" \
+            -e "s|__IMAGE__|$IMAGE|g" \
+            k8s-do-rendered/*.yaml
+          if grep -rl '__[A-Z_]*__' k8s-do-rendered; then
+            echo "::error::Unrendered placeholders remain in the files above."
+            exit 1
+          fi
+      - name: Record current revision
+        run: |
+          before="$(kubectl -n "$NS" get deployment knowledgebase \
+            -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}' 2>/dev/null || true)"
+          echo "BEFORE=${before}" >> "$GITHUB_ENV"
+      - name: Apply manifests
+        run: |
+          kubectl -n "$NS" apply -f k8s-do-rendered/network-policy.yaml
+          kubectl -n "$NS" apply -f k8s-do-rendered/service.yaml
+          kubectl -n "$NS" apply -f k8s-do-rendered/deployment.yaml
+          kubectl -n "$NS" apply -f k8s-do-rendered/ingress.yaml
+      - name: Wait for rollout
+        run: kubectl -n "$NS" rollout status deployment/knowledgebase --timeout=300s
+      - name: Diagnose and roll back
+        if: failure()
+        run: |
+          kubectl -n "$NS" get pods -l app.kubernetes.io/name=knowledgebase -o wide || true
+          kubectl -n "$NS" describe deployment knowledgebase || true
+          kubectl -n "$NS" logs -l app.kubernetes.io/name=knowledgebase --tail=50 --all-containers || true
+          kubectl -n "$NS" get events --sort-by=.lastTimestamp | tail -n 30 || true
+          if [ -n "${BEFORE:-}" ]; then
+            kubectl -n "$NS" rollout undo deployment/knowledgebase --to-revision="$BEFORE" || true
+          else
+            kubectl -n "$NS" rollout undo deployment/knowledgebase || true
+          fi
+          exit 1

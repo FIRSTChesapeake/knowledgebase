@@ -1,0 +1,8 @@
+# Applied once by a cluster admin (see k8s-do/README.md), never by CI.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __PROJECT_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: knowledgebase
+    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__

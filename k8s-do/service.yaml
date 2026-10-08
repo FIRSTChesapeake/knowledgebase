@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledgebase
+  namespace: __PROJECT_NAMESPACE__
+  labels:
+    app.kubernetes.io/name: knowledgebase
+    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: knowledgebase
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

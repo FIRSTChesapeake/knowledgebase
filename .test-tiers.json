@@ -1,12 +1,50 @@
 {
   "format": "test-tiers/v1",
-  "$comment": "Read by an external, project-agnostic tier runner -- not owned by this repo. One tier: light runs the tests of the local frontmatter plugin in plugins/note-properties (with its dev dependencies, before the plugin install prunes them), then mirrors the deploy workflow (npm ci, plugin install, Quartz's own tests under quartz/ (the plugin's vitest files would break a bare tsx --test), a full quartz build), which is the only check that catches a broken page, a bad wikilink target or a malformed frontmatter block before it reaches the published site. No services, no browser. The full (non-slim) node image is required: the quartz CLI shells out to git at import time and crashes when the binary is missing.",
+  "$comment": "Read by an external, project-agnostic tier runner -- not owned by this repo. light runs the tests of the local frontmatter plugin in plugins/note-properties (with its dev dependencies, before the plugin install prunes them), then mirrors the Pages deploy job (npm ci, plugin install, Quartz's own tests under quartz/ (the plugin's vitest files would break a bare tsx --test), a full quartz build), which is the only check that catches a broken page, a bad wikilink target or a malformed frontmatter block before it reaches the published site; then the contract tests under tests/ (Kubernetes manifests, the image build files and the deploy workflow), and actionlint on the deploy workflow. The full (non-slim) node image is required: the quartz CLI shells out to git at import time and crashes when the binary is missing. stack builds the production image (Dockerfile: Quartz build, then nginx) with a test domain, boots it and probes the routes the site depends on: pages, folder pages, the 404 page and status, sitemap and RSS carrying the rendered baseUrl, the search index and the health endpoint. The runner cannot start the container with a read-only root filesystem; that guarantee is held by the manifest contract tests and the cluster rollout.",
   "tiers": {
     "light": {
       "workdir": "",
       "image": "node:22-bookworm",
       "memory": "1280m",
-      "run": "npm ci --no-audit --no-fund && (cd plugins/note-properties && rm -rf dist && npm ci --no-audit --no-fund && npm run typecheck && npm test) && rm -rf .quartz quartz.lock.json && npx quartz plugin install --from-config && npx tsx --test \"quartz/**/*.test.ts\" \"quartz/**/*.test.js\" && npx quartz build"
+      "run": "npm ci --no-audit --no-fund && (cd plugins/note-properties && rm -rf dist && npm ci --no-audit --no-fund && npm run typecheck && npm test) && rm -rf .quartz quartz.lock.json && npx quartz plugin install --from-config && npx tsx --test \"quartz/**/*.test.ts\" \"quartz/**/*.test.js\" && npx quartz build && npx tsx --test \"tests/**/*.test.ts\"",
+      "extra": [
+        {
+          "image": "rhysd/actionlint:1.7.7",
+          "workdir": "/code",
+          "memory": "256m",
+          "args": [
+            "-shellcheck=",
+            ".github/workflows/deploy.yml"
+          ]
+        }
+      ]
+    },
+    "stack": {
+      "services": [
+        {
+          "name": "kb",
+          "network_alias": "kb",
+          "memory": "128m",
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": ".",
+            "args": {
+              "APP_DOMAIN": "kb.test.invalid"
+            },
+            "memory": "1792m"
+          },
+          "healthcheck": {
+            "cmd": "curl -sf -o /dev/null http://kb:8080/healthz",
+            "retries": 30
+          }
+        }
+      ],
+      "probe": {
+        "image": "curlimages/curl:8.11.1",
+        "workdir": "/code",
+        "memory": "128m",
+        "run": "set -eu; B=http://kb:8080; expect() { c=$(curl -s -o /dev/null -w '%{http_code}' \"$B$1\"); if [ \"$c\" != \"$2\" ]; then echo \"FAIL $1: got $c, want $2\"; exit 1; fi; echo \"ok $1 $c\"; }; expect / 200; curl -sf \"$B/\" | grep -q '<title>'; expect /sitemap.xml 200; curl -sf \"$B/sitemap.xml\" | grep -q 'https://kb.test.invalid/'; expect /index.xml 200; expect /static/contentIndex.json 200; expect /FRC/FRC-Power/Power-Troubleshooting 200; expect /FRC/ 200; if curl -s -o /dev/null -D - \"$B/FRC\" | grep -Ei '^location:.*(:8080|http://)'; then echo 'FAIL /FRC redirect leaks port or scheme'; exit 1; fi; expect /no-such-page-xyz 404; curl -s \"$B/no-such-page-xyz\" | grep -q 404; test \"$(curl -sf \"$B/healthz\")\" = ok; echo probe passed"
+      }
     }
   }
 }
