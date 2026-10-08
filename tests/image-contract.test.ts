@@ -2,34 +2,73 @@
 // nginx/default.conf and the parts of quartz.config.yaml the build rewrites.
 import { describe, test } from "node:test"
 import assert from "node:assert/strict"
-import { appManifests, loadYaml, readText } from "./helpers.ts"
+import { BAD_DOMAINS, GOOD_DOMAINS, appManifests, loadYaml, readText, runBash } from "./helpers.ts"
 
 const dockerfile = readText("Dockerfile")
 const lines = dockerfile.split("\n")
 const fromLines = lines.filter((l) => /^FROM\s+/.test(l))
 
+// Each RUN instruction with its line index, continuation lines joined as
+// Docker joins them, without the RUN keyword.
+function runInstructions(): { at: number; text: string }[] {
+  const out: { at: number; text: string }[] = []
+  for (let at = 0; at < lines.length; at++) {
+    if (!lines[at].startsWith("RUN ")) continue
+    let text = ""
+    for (let i = at; i < lines.length; i++) {
+      if (!lines[i].endsWith("\\")) {
+        text += lines[i]
+        break
+      }
+      text += lines[i].slice(0, -1)
+    }
+    out.push({ at, text: text.replace(/^RUN\s+/, "") })
+  }
+  return out
+}
+
+// The RUN that validates APP_DOMAIN with a whole-string [[ =~ ]] check.
+function validation(): { at: number; text: string } {
+  const run = runInstructions().find((r) => r.text.includes('"$APP_DOMAIN" =~'))
+  assert.ok(run, "a RUN validating APP_DOMAIN with [[ =~ ]]")
+  return run
+}
+
 describe("Dockerfile", () => {
   test("serves from a pinned nginx-unprivileged alpine image", () => {
     const final = fromLines[fromLines.length - 1]
-    assert.match(final, /^FROM nginxinc\/nginx-unprivileged:\d+\.\d+-alpine(\s|$)/)
+    assert.match(final, /^FROM nginxinc\/nginx-unprivileged:\d+\.\d+-alpine@sha256:[0-9a-f]{64}$/)
+  })
+
+  test("every base image is pinned by digest, with its tag beside it", () => {
+    for (const from of fromLines) assert.match(from, /^FROM [a-z0-9./-]+:[\w.-]+@sha256:[0-9a-f]{64}( AS \w+)?$/, from)
   })
 
   test("builds with a full (non-slim) node image", () => {
     assert.ok(fromLines.length >= 2, "multi-stage build")
     const builder = fromLines[0]
-    assert.match(builder, /^FROM node:\S+ AS builder$/)
+    assert.match(builder, /^FROM node:\S+@sha256:[0-9a-f]{64} AS builder$/)
     assert.ok(!builder.includes("slim"), "the quartz CLI needs git, which slim images lack")
   })
 
   test("validates APP_DOMAIN before rendering it into baseUrl", () => {
     const argAt = lines.findIndex((l) => /^ARG APP_DOMAIN\s*$/.test(l))
     assert.ok(argAt >= 0, "ARG APP_DOMAIN with no default")
-    const validateAt = lines.findIndex((l, i) => i > argAt && l.startsWith("RUN") && l.includes("grep -Eqx"))
+    const validateAt = validation().at
     const sedAt = lines.findIndex((l) => l.includes("sed -i") && l.includes("baseUrl"))
     assert.ok(validateAt > argAt, "a validation RUN follows the ARG")
     assert.ok(sedAt > validateAt, "the sed comes after validation")
     assert.ok(dockerfile.includes('"s|^  baseUrl: .*$|  baseUrl: ${APP_DOMAIN}|"'))
     assert.ok(dockerfile.includes('grep -qxF "  baseUrl: ${APP_DOMAIN}" quartz.config.yaml'))
+  })
+
+  test("the APP_DOMAIN check runs under bash and refuses all but one whole hostname", () => {
+    const shellAt = lines.findIndex((l) => l === 'SHELL ["/bin/bash", "-o", "pipefail", "-c"]')
+    const argAt = lines.findIndex((l) => /^ARG APP_DOMAIN\s*$/.test(l))
+    assert.ok(shellAt >= 0 && shellAt < argAt, "bash is the RUN shell before the check")
+    const run = validation().text
+    for (const d of GOOD_DOMAINS) assert.equal(runBash(run, { APP_DOMAIN: d }).status, 0, JSON.stringify(d))
+    for (const d of BAD_DOMAINS) assert.notEqual(runBash(run, { APP_DOMAIN: d }).status, 0, JSON.stringify(d))
   })
 
   test("only the built site and nginx config reach the final stage", () => {
@@ -90,6 +129,10 @@ describe("nginx/default.conf", () => {
     assert.match(conf, /error_page 404 \/404\.html;/)
     assert.match(conf, /location = \/healthz/)
     assert.match(conf, /absolute_redirect off;/)
+  })
+
+  test("sends no Strict-Transport-Security of its own (ingress-nginx does)", () => {
+    assert.ok(!/^\s*add_header\s+Strict-Transport-Security/im.test(conf))
   })
 
   test("sets headers only at server level", () => {

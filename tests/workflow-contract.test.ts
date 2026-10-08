@@ -1,7 +1,9 @@
 // Contract tests for .github/workflows/deploy.yml.
 import { describe, test } from "node:test"
 import assert from "node:assert/strict"
-import { deployWorkflow } from "./helpers.ts"
+import fs from "node:fs"
+import path from "node:path"
+import { BAD_DOMAINS, GOOD_DOMAINS, deployWorkflow, readText, runBash, scratchDir } from "./helpers.ts"
 
 const wf = deployWorkflow()
 const jobs: Record<string, any> = wf.jobs
@@ -64,10 +66,21 @@ describe("expressions stay out of shell scripts", () => {
     }
   })
 
-  test("docker actions are pinned to a full commit SHA", () => {
-    const docker = steps().filter(({ step }) => step.uses?.startsWith("docker/"))
-    assert.ok(docker.length >= 3)
-    for (const { step } of docker) assert.match(step.uses, /^docker\/[a-z-]+@[0-9a-f]{40}$/)
+  test("every action is pinned to a full commit SHA with its version beside it", () => {
+    const uses = steps().filter(({ step }) => step.uses)
+    assert.ok(uses.length >= 10)
+    for (const { job, step } of uses) assert.match(step.uses, /^[a-z-]+\/[a-z-]+@[0-9a-f]{40}$/, `${job}: ${step.uses}`)
+    // YAML parsing drops comments: check the raw lines for the version.
+    const lines = readText(".github/workflows/deploy.yml").split("\n").filter((l) => /^\s*(- )?uses: /.test(l))
+    assert.equal(lines.length, uses.length)
+    for (const line of lines) assert.match(line, /@[0-9a-f]{40} # v\d+\.\d+\.\d+$/, line)
+  })
+
+  test("no checkout but the guard's keeps the token in .git/config", () => {
+    for (const { job, step } of steps()) {
+      if (!step.uses?.startsWith("actions/checkout@") || job === "guard") continue
+      assert.equal(step.with?.["persist-credentials"], false, job)
+    }
   })
 })
 
@@ -83,9 +96,40 @@ describe("image job", () => {
 
   test("validates APP_DOMAIN before building", () => {
     const s = jobs.image.steps
-    const validate = s.findIndex((x: any) => x.env?.APP_DOMAIN && /grep -Eqx/.test(x.run ?? ""))
+    const validate = s.findIndex((x: any) => x.name === "Validate APP_DOMAIN")
     const build = s.findIndex((x: any) => x.uses?.startsWith("docker/build-push-action@"))
     assert.ok(validate >= 0 && validate < build)
+    assert.equal(s[validate].env.APP_DOMAIN, "${{ vars.APP_DOMAIN }}")
+  })
+
+  test("APP_DOMAIN validation checks the whole value, newlines and DNS limits", () => {
+    const run = jobs.image.steps.find((x: any) => x.name === "Validate APP_DOMAIN").run
+    for (const d of GOOD_DOMAINS) assert.equal(runBash(run, { APP_DOMAIN: d }).status, 0, JSON.stringify(d))
+    for (const d of BAD_DOMAINS) assert.notEqual(runBash(run, { APP_DOMAIN: d }).status, 0, JSON.stringify(d))
+  })
+
+  test("outputs the pushed image by digest, validated", () => {
+    const s = jobs.image.steps
+    const build = s.find((x: any) => x.uses?.startsWith("docker/build-push-action@"))
+    assert.equal(build.id, "build")
+    assert.equal(build.env?.DOCKER_BUILD_RECORD_UPLOAD, false, "no build record artifact")
+    const digest = s.find((x: any) => x.id === "digest")
+    assert.ok(s.indexOf(digest) > s.indexOf(build))
+    assert.equal(digest.env.DIGEST, "${{ steps.build.outputs.digest }}")
+    assert.equal(jobs.image.outputs.image, "${{ steps.digest.outputs.image }}")
+
+    const out = path.join(scratchDir(), "output")
+    const run = (DIGEST: string) => {
+      fs.writeFileSync(out, "")
+      return runBash(digest.run, { REPO: "ghcr.io/firstchesapeake/knowledgebase", DIGEST, GITHUB_OUTPUT: out })
+    }
+    const good = `sha256:${"a1".repeat(32)}`
+    assert.equal(run(good).status, 0)
+    assert.equal(fs.readFileSync(out, "utf8"), `image=ghcr.io/firstchesapeake/knowledgebase@${good}\n`)
+    for (const bad of ["", "sha256:abc", `sha256:${"A1".repeat(32)}`, `${good}\nx=1`]) {
+      assert.notEqual(run(bad).status, 0, JSON.stringify(bad))
+      assert.equal(fs.readFileSync(out, "utf8"), "", "nothing written on failure")
+    }
   })
 })
 
@@ -102,8 +146,49 @@ describe("deploy-cluster job", () => {
 
   test("validates every value it renders into the manifests", () => {
     const run = runOf((s) => s.name === "Validate inputs")
-    for (const v of ["$NS", "$APP_DOMAIN", "$IMAGE"]) assert.ok(run.includes(`printf '%s' "${v}"`), v)
     assert.equal(job.env.NS, "${{ vars.K8S_NAMESPACE }}")
+    assert.equal(job.env.IMAGE, "${{ needs.image.outputs.image }}")
+    const good = {
+      NS: "knowledgebase",
+      APP_DOMAIN: "kb.example.org",
+      IMAGE: `ghcr.io/firstchesapeake/knowledgebase@sha256:${"0f".repeat(32)}`,
+    }
+    const check = (env: Record<string, string>) => runBash(run, { ...good, ...env }).status
+    assert.equal(check({}), 0)
+    for (const d of GOOD_DOMAINS) assert.equal(check({ APP_DOMAIN: d }), 0, JSON.stringify(d))
+    for (const d of BAD_DOMAINS) assert.notEqual(check({ APP_DOMAIN: d }), 0, JSON.stringify(d))
+    for (const ns of ["", "kb\nx", "Kb", "kb.x", "a".repeat(64), "kb-"]) {
+      assert.notEqual(check({ NS: ns }), 0, JSON.stringify(ns))
+    }
+    for (const image of [
+      "ghcr.io/firstchesapeake/knowledgebase:sha-0123456789ab",
+      `ghcr.io/firstchesapeake/other@sha256:${"0f".repeat(32)}`,
+      `ghcr.io/firstchesapeake/knowledgebase@sha256:${"0f".repeat(31)}`,
+      `${good.IMAGE}\n`,
+      `docker.io/firstchesapeake/knowledgebase@sha256:${"0f".repeat(32)}`,
+    ]) {
+      assert.notEqual(check({ IMAGE: image }), 0, JSON.stringify(image))
+    }
+  })
+
+  test("only a numeric revision reaches GITHUB_ENV", () => {
+    const step = job.steps.find((s: any) => s.name === "Record current revision")
+    const dir = scratchDir()
+    const env = path.join(dir, "env")
+    // A stand-in kubectl that prints the revision annotation.
+    fs.writeFileSync(path.join(dir, "kubectl"), '#!/bin/sh\nprintf "%s" "$REVISION"\n', { mode: 0o755 })
+    const run = (REVISION: string) => {
+      fs.writeFileSync(env, "")
+      return runBash(step.run, { NS: "kb", REVISION, GITHUB_ENV: env, PATH: `${dir}:${process.env.PATH}` })
+    }
+    assert.equal(run("7").status, 0)
+    assert.equal(fs.readFileSync(env, "utf8"), "BEFORE=7\n")
+    assert.equal(run("").status, 0, "first deploy")
+    assert.equal(fs.readFileSync(env, "utf8"), "BEFORE=\n")
+    for (const bad of ["7\nLD_PRELOAD=/tmp/x", "7 ", "x"]) {
+      assert.notEqual(run(bad).status, 0, JSON.stringify(bad))
+      assert.equal(fs.readFileSync(env, "utf8"), "", "nothing written on failure")
+    }
   })
 
   test("writes the kubeconfig from the secret with mode 600", () => {
@@ -122,10 +207,25 @@ describe("deploy-cluster job", () => {
   })
 
   test("rolls back and stays red on failure", () => {
-    const rollback = job.steps.find((s: any) => s.if === "failure()")
+    const rollback = job.steps.find((s: any) => /^failure\(\)/.test(s.if ?? ""))
     assert.ok(rollback, "a failure() step")
     assert.ok(rollback.run.includes("rollout undo"))
     assert.match(rollback.run, /exit 1\s*$/)
+  })
+
+  test("rolls back only once the apply has run", () => {
+    // A failure before the apply changed nothing; an undo then would roll
+    // the healthy release back.
+    const ids = job.steps.map((s: any) => s.id)
+    assert.ok(job.steps.find((s: any) => s.id === "apply")?.run.includes("kubectl"))
+    assert.ok(job.steps.find((s: any) => s.id === "rollout")?.run.includes("rollout status"))
+    assert.ok(ids.indexOf("apply") < ids.indexOf("rollout"))
+    const rollback = job.steps.find((s: any) => /^failure\(\)/.test(s.if ?? ""))
+    assert.equal(rollback.if, "failure() && (steps.apply.outcome == 'failure' || steps.rollout.outcome == 'failure')")
+  })
+
+  test("never prints pod logs into the public run log", () => {
+    for (const s of job.steps) assert.ok(!/kubectl[^\n]*\blogs\b/.test(s.run ?? ""), s.name)
   })
 })
 
