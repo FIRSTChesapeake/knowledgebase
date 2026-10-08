@@ -32,10 +32,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # Only commits already merged to main may deploy, whether by tag push or
-      # workflow_dispatch from any branch. deploy needs this job, so a failure
-      # here stops the publish. Fails closed: a missing origin/main is a
-      # failure, not a pass.
+      # Only commits already merged to main may deploy. A dispatch from main
+      # itself passes this check and republishes Pages from main, but the
+      # image-publish and production environments refuse any ref but a v*
+      # tag, so the cluster is untouched. Every job needs this one, so a
+      # failure here stops the publish. Fails closed: a missing origin/main
+      # is a failure, not a pass.
       - name: Require the deployed commit to be on main
         env:
           DEPLOY_SHA: ${{ github.sha }}
@@ -100,7 +102,10 @@ jobs:
   # GHCR tagged :sha-<commit> and with the version tag. Tags can be moved by
   # a later push, so the job's output is the pushed digest, and the cluster
   # deploys by digest. The image-publish environment (v* tags only, no
-  # reviewers) keeps packages: write off any other ref.
+  # reviewers) stops this unmodified workflow from pushing from any other
+  # ref. Like the guard it is not a control against repo writers (an
+  # edited workflow can drop it); deploy-cluster only uses the digest this
+  # run pushed.
   image:
     needs: guard
     runs-on: ubuntu-22.04

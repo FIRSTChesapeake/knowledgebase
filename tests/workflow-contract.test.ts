@@ -82,6 +82,12 @@ describe("expressions stay out of shell scripts", () => {
     for (const { job, step } of checkouts) assert.equal(step.with?.["persist-credentials"], false, job)
   })
 
+  test("the guard's comment does not promise more than it checks", () => {
+    const text = readText(".github/workflows/deploy.yml")
+    assert.ok(!text.includes("workflow_dispatch from any branch"))
+    assert.match(text, /A dispatch from main\n\s+# itself passes this check and republishes Pages from main/)
+  })
+
   test("the header says a dispatch must run from a v* tag", () => {
     assert.match(readText(".github/workflows/deploy.yml"), /dispatch it from the v\* tag \("Use workflow from"\), never from a\n# branch/)
   })

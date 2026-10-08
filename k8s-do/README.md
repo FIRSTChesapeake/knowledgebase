@@ -60,7 +60,15 @@ required before `KUBECONFIG_KB` is stored:
   - **Allow administrators to bypass configured protection rules:** off.
 - Environment `image-publish` (the job that pushes to GHCR): **Deployment
   branches and tags:** selected only, the single rule tag `v*`. No reviewers
-  needed; it keeps `packages: write` off every branch.
+  needed. Like the guard, it stops the unmodified workflow from pushing an
+  image from any other ref; it is not a control against someone who can
+  push to the repo, since an environment only gates the jobs that name it
+  and an edited workflow on a branch can drop it. The cluster deploy only
+  ever uses the digest its own run pushed, so an image pushed that way is
+  never deployed by the workflow.
+- Optional hardening: a **branch ruleset** on all branches that restricts
+  changes to `.github/workflows/**` to maintainers, so a repo writer
+  cannot run an edited workflow with the repo's token at all.
 - Environment `github-pages`: add the tag rule `v*` to its deployment
   branches and tags, or the tag-triggered Pages deploy is refused.
 - A **tag ruleset** targeting `v*`: restrict creations, updates and
@@ -107,9 +115,25 @@ render k8s-do/bootstrap/admission-policy.yaml | kubectl apply -f -
 `render` checks the three values the same way the workflow does (a
 namespace name, a lowercase hostname, a lowercase GitHub owner) and prints
 nothing when one is wrong, so `kubectl apply` gets no objects and applies
-nothing. A cluster bootstrapped before the NetworkPolicies moved here
-already has them (CI applied them); applying them again only takes them
-over.
+nothing.
+
+### Migrating a cluster bootstrapped before the NetworkPolicies moved here
+
+CI used to apply the NetworkPolicies, and `kb-deployer` could write them.
+After running the block above, in this order:
+
+1. Re-apply the Role (the block above did; `apply` replaces its rules):
+   `render k8s-do/bootstrap/deploy-rbac.yaml | kubectl apply -f -`.
+2. Check the credential lost them; this must print `no`:
+   `kubectl auth can-i create networkpolicies --as=system:serviceaccount:$NS:kb-deployer -n "$NS"`.
+3. Delete the old NetworkPolicy admission policy and its binding, which
+   `apply` does not remove:
+   `kubectl delete validatingadmissionpolicybinding "$NS-kb-deployer-networkpolicies"` and
+   `kubectl delete validatingadmissionpolicy "$NS-kb-deployer-networkpolicies"`.
+4. Check that exactly the three policies in `network-policy.yaml` remain
+   (`default-namespace-isolation`, `allow-acme-solver`,
+   `default-deny-egress`), and delete anything else:
+   `kubectl get netpol -n "$NS"`.
 
 Re-apply after changing `APP_DOMAIN`: the Ingress policy admits only that
 host, so the next deploy with a new domain is refused until it is.
@@ -152,9 +176,10 @@ What each file sets up:
     with a read-only root filesystem and no privilege escalation, and no
     say over placement or runtime (no `nodeName`, `nodeSelector`,
     `affinity`, `tolerations`, `priorityClassName`, `runtimeClassName`,
-    `hostAliases` or ephemeral containers);
+    `hostAliases` or ephemeral containers, and only the default scheduler);
   - the Ingress `knowledgebase`, class `nginx`, every host equal to
-    `APP_DOMAIN`, TLS in `knowledgebase-tls`, the `letsencrypt-prod`
+    `APP_DOMAIN`, TLS required and in `knowledgebase-tls`, plain `Prefix` or
+    `Exact` paths, the `letsencrypt-prod`
     ClusterIssuer and no other annotation (in particular no
     `nginx.ingress.kubernetes.io/*`);
   - the ClusterIP Service `knowledgebase`.
@@ -176,6 +201,14 @@ kubectl $D patch deployment knowledgebase --type=json \
   -p '[{"op":"add","path":"/spec/template/spec/volumes/-","value":{"name":"h","hostPath":{"path":"/"}}}]'
 kubectl $D patch deployment knowledgebase --type=json \
   -p '[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe","value":{"exec":{"command":["id"]}}}]'
+kubectl $D patch deployment knowledgebase --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/containers/0/lifecycle","value":{"postStart":{"exec":{"command":["id"]}}}}]'
+kubectl $D patch deployment knowledgebase --type=json \
+  -p '[{"op":"replace","path":"/spec/template/spec/containers/0/securityContext/readOnlyRootFilesystem","value":false}]'
+kubectl $D patch deployment knowledgebase --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/tolerations","value":[{"operator":"Exists"}]}]'
+kubectl $D patch deployment knowledgebase --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/nodeName","value":"any-node"}]'
 kubectl $D create deployment probe --image=nginx
 kubectl $D create ingress probe --rule="other.example/=knowledgebase:80"
 kubectl $D annotate ingress knowledgebase nginx.ingress.kubernetes.io/server-snippet=x
@@ -258,14 +291,20 @@ To roll back by hand:
 kubectl -n "$NS" rollout undo deployment/knowledgebase
 ```
 
-Or re-run the workflow for an earlier version tag. The admission policy
-only admits images pinned by digest, so `kb-deployer` cannot roll back to a
-revision deployed by tag before the switch to digests; an admin can.
+Re-running the workflow for an earlier version tag works only for a tag
+whose `deploy.yml` is the one on `main` (item 3 of the reviewer checklist):
+a tag cut before the NetworkPolicies moved to the bootstrap carries a
+workflow that still applies them, which `kb-deployer` may no longer do, so
+its run fails before the Deployment changes. Return to such a version with
+`rollout undo` instead. The admission policy only admits images pinned by
+digest, so `kb-deployer` cannot roll back to a revision deployed by tag
+before the switch to digests; an admin can.
 
 ## Cutover checklist
 
 1. Deploy (push a version tag, or dispatch the workflow from a `v*` tag;
-   a dispatch from a branch is refused) while GitHub Pages is still live. Make the GHCR package public if this is the
+   a dispatch from a branch is refused) while GitHub Pages is still live.
+   Make the GHCR package public if this is the
    first push, and re-run the deploy if it failed on the image pull.
 2. Point a DNS record for the `APP_DOMAIN` host at the ingress load balancer.
 3. Wait until the `knowledgebase-tls` Certificate is Ready:

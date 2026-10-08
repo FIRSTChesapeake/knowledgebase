@@ -486,6 +486,34 @@ describe("the deploy credential is bounded by the cluster, not only by RBAC", ()
     }
   })
 
+  test("Ingresses: TLS required, Prefix or Exact paths of plain characters", () => {
+    const all = expressions(policyFor("networking.k8s.io", "ingresses"))
+    const e = all.join("\n")
+    assert.ok(e.includes("has(object.spec.tls) && size(object.spec.tls) > 0 &&"), "tls: [] is refused")
+    assert.ok(e.includes("has(p.pathType) && p.pathType in ['Prefix', 'Exact']"), "pathType")
+    const pattern = /p\.path\.matches\('([^']+)'\)/.exec(e)?.[1]
+    assert.ok(pattern, "a path pattern")
+    assert.ok(e.includes("has(p.path) && p.path.matches("))
+    const re = new RegExp(pattern)
+    for (const good of ["/", "/static/contentIndex.json", "/FRC/", "/a_b-c.d"]) assert.ok(re.test(good), good)
+    for (const bad of ["", "x", "/(.*)", "/x$", "/a b", "/x;y", "/x{", "/~x", "/x\n"]) assert.ok(!re.test(bad), JSON.stringify(bad))
+    const [{ doc }] = appManifests().filter(({ doc }) => doc.kind === "Ingress")
+    assert.ok(doc.spec.tls.length > 0)
+    for (const r of doc.spec.rules) {
+      for (const p of r.http.paths) {
+        assert.ok(["Prefix", "Exact"].includes(p.pathType), p.pathType)
+        assert.ok(re.test(p.path), p.path)
+      }
+    }
+  })
+
+  test("Deployments: only the default scheduler", () => {
+    const e = expressions(policyFor("apps", "deployments")).join("\n")
+    assert.ok(e.includes("!has(variables.pod.schedulerName) || variables.pod.schedulerName == 'default-scheduler'"))
+    const [{ doc: dep }] = appManifests().filter(({ doc }) => doc.kind === "Deployment")
+    assert.ok([undefined, "default-scheduler"].includes(dep.spec.template.spec.schedulerName))
+  })
+
   test("the app's own Ingress passes the Ingress policy's allowlist", () => {
     const [{ doc }] = appManifests().filter(({ doc }) => doc.kind === "Ingress")
     for (const k of Object.keys(doc.metadata.annotations ?? {})) {
@@ -536,6 +564,14 @@ describe("who may deploy is documented as required repo settings", () => {
     assert.match(list, /run is for a `v\*` tag/)
     assert.match(list, /tagged commit is on `main`/)
     assert.match(list, /git diff origin\/main <tag> -- \.github\/workflows\/deploy\.yml/)
+  })
+
+  test("image-publish is described as gating the unmodified workflow, not repo writers", () => {
+    for (const text of [section, readText(".github/workflows/deploy.yml")]) {
+      assert.ok(!/keeps `?packages: write`? off/.test(text), "overclaims what the environment does")
+      assert.match(text, /not a\s+control against/)
+    }
+    assert.match(section, /ruleset\*\* on all branches that restricts\s+changes to `\.github\/workflows\/\*\*`/)
   })
 
   test("the cutover dispatches from a v* tag, never a branch", () => {
@@ -602,6 +638,40 @@ describe("the bootstrap docs cover what the manifests cannot", () => {
       assert.match(line, /^kubectl \$D /, "every probe is a server-side dry run as kb-deployer")
     }
     assert.match(block, /^D="-n \$NS \$AS --dry-run=server -o name"$/m)
+    for (const needle of ['containers/0/lifecycle"', 'readOnlyRootFilesystem","value":false', 'spec/tolerations"', 'spec/nodeName"']) {
+      assert.ok(block.includes(needle), needle)
+    }
+  })
+
+  test("migrating an older bootstrap removes the NetworkPolicy access and policy, in order", () => {
+    const m = readme.slice(readme.indexOf("### Migrating a cluster bootstrapped before the NetworkPolicies moved here"))
+    const steps = [
+      "render k8s-do/bootstrap/deploy-rbac.yaml | kubectl apply -f -",
+      'kubectl auth can-i create networkpolicies --as=system:serviceaccount:$NS:kb-deployer -n "$NS"',
+      'kubectl delete validatingadmissionpolicybinding "$NS-kb-deployer-networkpolicies"',
+      'kubectl delete validatingadmissionpolicy "$NS-kb-deployer-networkpolicies"',
+      'kubectl get netpol -n "$NS"',
+    ]
+    let at = 0
+    for (const step of steps) {
+      const i = m.indexOf(step, at)
+      assert.ok(i >= 0, `${step} (in order)`)
+      at = i
+    }
+    assert.match(m, /must print `no`/)
+    // The names deleted are the ones the policy was shipped under.
+    // The names deleted follow the scheme the policies ship under.
+    for (const { doc } of bootstrapManifests().filter(({ doc }) => doc.kind.startsWith("ValidatingAdmissionPolicy"))) {
+      assert.match(doc.metadata.name, /^__PROJECT_NAMESPACE__-kb-deployer-[a-z]+$/)
+    }
+    for (const name of ["default-namespace-isolation", "allow-acme-solver", "default-deny-egress"]) assert.ok(m.includes(name), name)
+  })
+
+  test("rollback says which tags can be re-deployed and points older ones at rollout undo", () => {
+    const r = readme.slice(readme.indexOf("## Rollback"), readme.indexOf("## Cutover checklist"))
+    assert.match(r, /works only for a tag\s+whose `deploy\.yml` is the one on `main`/)
+    assert.match(r, /`rollout undo` instead/)
+    assert.ok(!/^Or re-run the workflow for an earlier version tag\./m.test(r))
   })
 })
 

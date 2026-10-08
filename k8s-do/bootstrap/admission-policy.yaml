@@ -77,6 +77,9 @@ spec:
         && !has(variables.pod.priorityClassName) && !has(variables.pod.runtimeClassName)
         && !has(variables.pod.hostAliases) && !has(variables.pod.ephemeralContainers)
       message: "No nodeName, nodeSelector, affinity, tolerations, priorityClassName, runtimeClassName, hostAliases or ephemeralContainers."
+    # The API server defaults it to default-scheduler.
+    - expression: "!has(variables.pod.schedulerName) || variables.pod.schedulerName == 'default-scheduler'"
+      message: "schedulerName must be default-scheduler."
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
@@ -120,10 +123,16 @@ spec:
       message: "No default backend: it would catch every host."
     - expression: "has(object.spec.rules) && size(object.spec.rules) > 0 && object.spec.rules.all(r, has(r.host) && r.host == '__APP_DOMAIN__')"
       message: "Every rule must name the host __APP_DOMAIN__."
-    - expression: "has(object.spec.tls) && object.spec.tls.all(t, has(t.hosts) && t.hosts.all(h, h == '__APP_DOMAIN__') && t.secretName == 'knowledgebase-tls')"
+    - expression: "has(object.spec.tls) && size(object.spec.tls) > 0 && object.spec.tls.all(t, has(t.hosts) && t.hosts.all(h, h == '__APP_DOMAIN__') && t.secretName == 'knowledgebase-tls')"
       message: "TLS may only cover __APP_DOMAIN__, in the Secret knowledgebase-tls."
     - expression: "object.spec.rules.all(r, !has(r.http) || r.http.paths.all(p, has(p.backend.service) && p.backend.service.name == 'knowledgebase'))"
       message: "Paths may only route to the knowledgebase Service."
+    # No ImplementationSpecific paths: ingress-nginx reads them as regexes.
+    - expression: >-
+        object.spec.rules.all(r, !has(r.http) || r.http.paths.all(p,
+          has(p.pathType) && p.pathType in ['Prefix', 'Exact']
+          && has(p.path) && p.path.matches('^/[A-Za-z0-9/_.-]*$')))
+      message: "Paths must be Prefix or Exact, and plain: a leading / then letters, digits and /_.-"
     # An allowlist: no nginx.ingress.kubernetes.io/* (or any other
     # controller) annotation, and only the production ClusterIssuer.
     - expression: >-
