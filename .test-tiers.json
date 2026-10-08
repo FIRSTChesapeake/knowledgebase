@@ -31,7 +31,7 @@
             "args": {
               "APP_DOMAIN": "kb.test.invalid"
             },
-            "memory": "1792m"
+            "memory": "1088m"
           },
           "healthcheck": {
             "cmd": "curl -sf -o /dev/null http://kb:8080/healthz",

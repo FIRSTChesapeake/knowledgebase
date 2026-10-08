@@ -17,13 +17,17 @@ RUN if ! printf '%s' "$APP_DOMAIN" | grep -Eqx '[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.
       exit 1; \
     fi
 
+# Set before the COPY: in a git worktree checkout the copied .git is a file
+# pointing outside the context, and any git command run beside it fails.
+# Quartz's own git lookups tolerate that and fall back to file dates.
+RUN git config --global --add safe.directory /src
+
 WORKDIR /src
 # .git is part of the context (see .dockerignore) so Quartz can read page
 # dates from history. It stays in this stage and never reaches the final image.
 COPY . .
 
-RUN git config --global --add safe.directory /src \
- && npm ci --no-audit --no-fund \
+RUN npm ci --no-audit --no-fund \
  && npx quartz plugin install --from-config
 
 # The grep fails the build if the sed matched nothing.
