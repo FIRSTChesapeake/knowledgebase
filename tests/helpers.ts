@@ -15,6 +15,11 @@ export function readText(rel: string): string {
   return fs.readFileSync(repoPath(rel), "utf8")
 }
 
+// A string as a RegExp source that matches it literally: every metacharacter, backslash included, is escaped.
+export function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 // Every non-empty document in a (possibly multi-document) YAML file.
 export function loadYamlDocs(rel: string): any[] {
   return parseAllDocuments(readText(rel))

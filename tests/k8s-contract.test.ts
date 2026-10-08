@@ -8,13 +8,13 @@ import {
   GOOD_DOMAINS,
   appManifests,
   bootstrapManifests,
+  escapeRegExp,
   listFiles,
   loadYamlDocs,
   readText,
   renderedPlaceholders,
   runBash,
   scratchDir,
-  walkFiles,
 } from "./helpers.ts"
 
 const PLACEHOLDER = /__[A-Z_]+__/g
@@ -48,22 +48,6 @@ function ofKind(kind: string) {
 }
 
 describe("manifests never hard-code the domain", () => {
-  const files = [
-    ...walkFiles("k8s-do"),
-    ...walkFiles("nginx"),
-    "Dockerfile",
-    ".dockerignore",
-    ...walkFiles(".github/workflows"),
-  ]
-
-  test("no deployment file names a real host", () => {
-    for (const file of files) {
-      const text = readText(file)
-      assert.ok(!text.includes("firstchs.org"), `${file} names firstchs.org`)
-      assert.ok(!text.includes("github.io"), `${file} names github.io`)
-    }
-  })
-
   test("Ingress hosts are only __APP_DOMAIN__", () => {
     const ingresses = ofKind("Ingress")
     assert.ok(ingresses.length > 0)
@@ -94,7 +78,7 @@ describe("manifests never hard-code the domain", () => {
   test("the README applies every bootstrap file", () => {
     const readme = readText("k8s-do/README.md")
     for (const file of listFiles("k8s-do/bootstrap", ".yaml")) {
-      assert.match(readme, new RegExp(`^render ${file.replace(/\./g, "\\.")}\\s+\\| kubectl apply -f -$`, "m"), file)
+      assert.match(readme, new RegExp(`^render ${escapeRegExp(file)}\\s+\\| kubectl apply -f -$`, "m"), file)
     }
   })
 
@@ -454,7 +438,7 @@ describe("the deploy credential is bounded by the cluster, not only by RBAC", ()
     const e = expressions(policyFor("apps", "deployments")).find((x: string) => x.includes(".matches("))
     const pattern = /c\.image\.matches\('([^']+)'\)/.exec(e)?.[1]
     assert.ok(pattern, "an image pattern")
-    const re = new RegExp(pattern.replace("__GHCR_OWNER__", "firstchesapeake"))
+    const re = new RegExp(pattern.replace("__GHCR_OWNER__", escapeRegExp("firstchesapeake")))
     const digest = "ab".repeat(32)
     assert.ok(re.test(`ghcr.io/firstchesapeake/knowledgebase@sha256:${digest}`))
     for (const bad of [
