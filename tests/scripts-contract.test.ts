@@ -24,6 +24,10 @@ function fakeToken(exp: number): string {
     b64url("not a real signature"),
   ].join(".")
 }
+// One scratch root, a fresh directory under it per use.
+const root = scratchDir()
+const freshDir = () => fs.mkdtempSync(path.join(root, "run-"))
+
 const now = () => Math.floor(Date.now() / 1000)
 const iso = (epoch: number) => new Date(epoch * 1000).toISOString().replace(/\.\d{3}Z$/, "Z")
 
@@ -72,7 +76,7 @@ function stubs(dir: string): void {
 type Run = { status: number | null; out: string; gh: string[]; kubectl: string[]; secret: string | null; seen: string[] }
 
 function runScript(script: string, env: Record<string, string>, args: string[] = []): Run {
-  const dir = scratchDir()
+  const dir = freshDir()
   stubs(dir)
   const file = (name: string) => path.join(dir, name)
   for (const name of ["gh-calls", "kubectl-calls", "kc-seen"]) fs.writeFileSync(file(name), "")
@@ -214,7 +218,7 @@ describe("rotate-deploy-token.sh", () => {
 describe("upload-github-secrets.sh", () => {
   const script = "scripts/upload-github-secrets.sh"
   const kubeconfig = (token: string) => {
-    const file = path.join(scratchDir(), "kb-deployer.kubeconfig")
+    const file = path.join(freshDir(), "kb-deployer.kubeconfig")
     fs.writeFileSync(file, `apiVersion: v1\nkind: Config\nusers:\n  - name: kb-deployer\n    user:\n      token: ${token}\n`, { mode: 0o600 })
     return file
   }
@@ -285,7 +289,8 @@ describe(".env stays out of git", () => {
     assert.match(keys.GHCR_OWNER, /^[a-z0-9-]+$/)
     assert.ok("KB_ADMIN_KUBECONFIG" in keys && "KB_ADMIN_CONTEXT" in keys)
     for (const [k, v] of Object.entries(keys)) {
-      assert.ok(!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v), `${k} looks like a token`)
+      // A JWT starts with base64 of '{"': eyJ.
+      assert.ok(!/eyJ[A-Za-z0-9_-]{8,}/.test(v), `${k} looks like a token`)
       assert.ok(!/https?:\/\//.test(v), `${k} holds an address`)
       if (/TOKEN$|SECRET|PASSWORD|KUBECONFIG_KB$/.test(k)) assert.equal(v, "", `${k} must be empty`)
     }
