@@ -1,0 +1,18 @@
+# .git and content/ must stay in the context: the image build runs
+# `quartz build`, which reads both.
+node_modules
+**/node_modules
+public
+.quartz
+.quartz-cache
+quartz.lock.json
+plugins/note-properties/dist
+.scratch
+.claude
+.github
+k8s-do
+tests
+*.log
+# Local settings, never part of the image.
+.env
+.env.*

@@ -1,0 +1,30 @@
+# ${APP_DOMAIN} is substituted by the cluster when it applies the release
+# (the config repo sets it). The name stays fixed, so a changed APP_DOMAIN
+# updates this Ingress in place and cert-manager reissues the certificate
+# into the same Secret.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: knowledgebase
+  labels:
+    app.kubernetes.io/name: knowledgebase
+    app.kubernetes.io/part-of: knowledgebase
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - ${APP_DOMAIN}
+      secretName: knowledgebase-tls
+  rules:
+    - host: ${APP_DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: knowledgebase
+                port:
+                  number: 80

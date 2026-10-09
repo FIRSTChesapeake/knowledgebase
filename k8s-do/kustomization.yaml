@@ -1,0 +1,10 @@
+# The release workflow adds images: (the digest it pushed) to its own copy
+# of this file before publishing k8s-do/ as the release artifact; git never
+# holds one. No namespace (the cluster sets it), no commonLabels (they would
+# rewrite the immutable selector), no Secrets or generators.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - service.yaml
+  - deployment.yaml
+  - ingress.yaml

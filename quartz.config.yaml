@@ -6,7 +6,7 @@ configuration:
   enablePopovers: true
   analytics: null
   locale: en-US
-  baseUrl: firstchesapeake.github.io/knowledgebase
+  baseUrl: kb.firstchs.org
   ignorePatterns:
     - private
     - templates
