@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-#
 # Production image: Quartz builds the site in the builder stage and a static
 # nginx serves it. Build with
 #   docker build --build-arg APP_DOMAIN=kb.example.org .

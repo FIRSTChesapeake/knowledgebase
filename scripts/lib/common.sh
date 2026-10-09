@@ -13,14 +13,31 @@ die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 # KB_ENV_FILE points at another env file (the contract tests use it); the
 # default is the git-ignored .env at the repo root.
+#
+# The file is parsed, never run: each line is blank, a # comment, or
+# KEY=value with KEY matching ^[A-Z][A-Z0-9_]*$. The value is taken
+# literally (no expansion or substitution), minus one pair of matching
+# surrounding quotes. Any other line is an error. As with sourcing, a value
+# in the file overrides one already in the environment.
 load_env() {
   local env_file="${KB_ENV_FILE:-$REPO_ROOT/.env}"
-  if [[ -f "$env_file" ]]; then
-    set -o allexport
-    # shellcheck disable=SC1090
-    source "$env_file"
-    set +o allexport
-  fi
+  [[ -f "$env_file" ]] || return 0
+  local line key value n=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    n=$((n + 1))
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
+    if [[ ! "$line" =~ ^([A-Z][A-Z0-9_]*)=(.*)$ ]]; then
+      die "$env_file:$n: not a KEY=value line"
+    fi
+    key="${BASH_REMATCH[1]}"
+    value="${BASH_REMATCH[2]}"
+    if [[ ${#value} -ge 2 && ( ( "${value:0:1}" == '"' && "${value: -1}" == '"' ) \
+          || ( "${value:0:1}" == "'" && "${value: -1}" == "'" ) ) ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+    export "$key=$value"
+  done < "$env_file"
 }
 
 require_gh() {

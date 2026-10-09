@@ -1,8 +1,9 @@
 // Contract tests for the production image: Dockerfile, .dockerignore,
 // nginx/default.conf and the parts of quartz.config.yaml the build rewrites.
+import { createHash } from "node:crypto"
 import { describe, test } from "node:test"
 import assert from "node:assert/strict"
-import { BAD_DOMAINS, GOOD_DOMAINS, appManifests, loadYaml, readText, runBash } from "./helpers.ts"
+import { BAD_DOMAINS, GOOD_DOMAINS, appManifests, loadYaml, readText, runBash, walkFiles } from "./helpers.ts"
 
 const dockerfile = readText("Dockerfile")
 const lines = dockerfile.split("\n")
@@ -42,6 +43,13 @@ describe("Dockerfile", () => {
 
   test("every base image is pinned by digest, with its tag beside it", () => {
     for (const from of fromLines) assert.match(from, /^FROM [a-z0-9./-]+:[\w.-]+@sha256:[0-9a-f]{64}( AS \w+)?$/, from)
+  })
+
+  test("no floating syntax frontend: the builder's own parser reads the file", () => {
+    // A # syntax= line pulls a frontend image at build time, and it sees
+    // the whole build context.
+    const directives = lines.filter((l) => /^#\s*syntax\s*=/i.test(l))
+    assert.deepEqual(directives, [])
   })
 
   test("builds with a full (non-slim) node image", () => {
@@ -144,6 +152,74 @@ describe("nginx/default.conf", () => {
       depth += (code.match(/\{/g) ?? []).length - (code.match(/\}/g) ?? []).length
     }
     assert.equal(depth, 0, "balanced braces")
+  })
+
+  // The report-only CSP as directive name -> sources.
+  function csp(): Map<string, string[]> {
+    const m = conf.match(/^\s*add_header\s+Content-Security-Policy-Report-Only\s+"([^"]+)"\s+always;\s*$/m)
+    assert.ok(m, "an add_header Content-Security-Policy-Report-Only \"...\" always;")
+    const out = new Map<string, string[]>()
+    for (const part of m[1].split(";")) {
+      const [name, ...sources] = part.trim().split(/\s+/)
+      if (name) out.set(name, sources)
+    }
+    return out
+  }
+
+  test("sends a report-only Content-Security-Policy at server level", () => {
+    let depth = 0
+    let seen = false
+    for (const line of conf.split("\n")) {
+      const code = line.replace(/#.*/, "")
+      if (/\badd_header\s+Content-Security-Policy-Report-Only\b/.test(code)) {
+        assert.equal(depth, 1, "in the server block, not a location")
+        seen = true
+      }
+      depth += (code.match(/\{/g) ?? []).length - (code.match(/\}/g) ?? []).length
+    }
+    assert.ok(seen, "the header is set")
+    assert.ok(csp().size > 0)
+  })
+
+  test("the CSP locks down defaults and allows no wildcard source", () => {
+    const policy = csp()
+    assert.deepEqual(policy.get("default-src"), ["'self'"])
+    assert.deepEqual(policy.get("object-src"), ["'none'"])
+    assert.deepEqual(policy.get("base-uri"), ["'self'"])
+    assert.deepEqual(policy.get("frame-ancestors"), ["'none'"])
+    assert.deepEqual(policy.get("form-action"), ["'self'"])
+    for (const [name, sources] of policy) {
+      for (const s of sources) {
+        assert.ok(!s.includes("*"), `${name} allows a wildcard: ${s}`)
+        assert.ok(!/^[a-z][a-z0-9+.-]*:$/i.test(s) || s === "data:", `${name} allows a whole scheme: ${s}`)
+      }
+    }
+  })
+
+  test("the CSP's script hashes cover Quartz's inline scripts", () => {
+    const sha = (s: string) => `'sha256-${createHash("sha256").update(s, "utf8").digest("base64")}'`
+    const scriptSrc = csp().get("script-src") ?? []
+
+    // renderPage.tsx: one contentIndex fetch per page, relative to the root.
+    const renderPage = readText("quartz/components/renderPage.tsx")
+    assert.match(renderPage, /const contentIndexPath = joinSegments\(baseDir, "static\/contentIndex\.json"\)/)
+    const template = renderPage.match(/const contentIndexScript = `(.*)`/)
+    assert.ok(template, "renderPage.tsx builds contentIndexScript")
+    const depths = walkFiles("content")
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.split("/").length - 2)
+    const deepest = Math.max(1, ...depths)
+    const prefixes = ["/", "./"]
+    for (let d = 1; d <= deepest; d++) prefixes.push("../".repeat(d))
+    for (const p of prefixes) {
+      const script = template[1].replace("${contentIndexPath}", `${p}static/contentIndex.json`)
+      assert.ok(scriptSrc.includes(sha(script)), `no hash for: ${script}`)
+    }
+
+    // pages/404.tsx: the case-insensitive redirect.
+    const notFound = readText("quartz/components/pages/404.tsx").match(/__html: `([\s\S]*?)`,/)
+    assert.ok(notFound, "404.tsx has an inline script")
+    assert.ok(scriptSrc.includes(sha(notFound[1])), "no hash for the 404 page script")
   })
 
   test("the Deployment's port and probes agree with the conf", () => {

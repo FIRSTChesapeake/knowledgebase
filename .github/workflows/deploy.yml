@@ -22,6 +22,19 @@ on:
 permissions:
   contents: read
 
+# One run per release tag at a time, never cancelled: two runs for the same
+# tag would otherwise both find it free, and the second push would replace
+# the first.
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # The one definition of a release tag: v + SemVer 2.0, without build
+  # metadata (a + is not allowed in an OCI tag). Every step that reads the
+  # tag checks it against this.
+  VERSION_TAG_RE: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?$'
+
 jobs:
   guard:
     runs-on: ubuntu-22.04
@@ -50,9 +63,9 @@ jobs:
           echo "Commit ${DEPLOY_SHA} is on main."
 
   # Builds the site into an nginx image (see Dockerfile) and pushes it to
-  # GHCR tagged :sha-<commit> and with the version tag. Tags can be moved by
-  # a later push, so the job's output is the pushed digest, and the release
-  # pins the image by digest. The image-publish environment (v* tags only,
+  # GHCR tagged with the version only. It first refuses a version already
+  # released, so a re-run never moves a released image's tag. The job's
+  # output is the pushed digest, and the release pins the image by digest. The image-publish environment (v* tags only,
   # no reviewers) stops this unmodified workflow from pushing from any other
   # ref. Like the guard it is not a control against repo writers (an
   # edited workflow can drop it); manifests only uses the digest this run
@@ -90,24 +103,44 @@ jobs:
         run: |
           owner_lower="${GITHUB_REPOSITORY_OWNER,,}"
           repo="ghcr.io/${owner_lower}/knowledgebase"
-          tags="${repo}:sha-${GITHUB_SHA::12}"
-          # The version tag joins a comma-separated list: admit only a plain
-          # version, so a tag name can't add tags of its own.
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*$ ]]; then
-              echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
-              exit 1
-            fi
-            tags="${tags},${repo}:${GITHUB_REF_NAME}"
+          # The tag becomes a docker tag in a comma-separated list: admit only
+          # a release version, so a tag name can't add tags of its own.
+          if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" == *$'\n'* || ${#GITHUB_REF_NAME} -gt 128 || ! "$GITHUB_REF_NAME" =~ $VERSION_TAG_RE ]]; then
+            echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
+            exit 1
           fi
-          echo "repo=${repo}" >> "$GITHUB_OUTPUT"
-          echo "manifests=ghcr.io/${owner_lower}/manifests/knowledgebase" >> "$GITHUB_OUTPUT"
-          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+          {
+            echo "repo=${repo}"
+            echo "manifests=ghcr.io/${owner_lower}/manifests/knowledgebase"
+            echo "tags=${repo}:${GITHUB_REF_NAME}"
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        with:
+          version: 2.9.6
+      # The same check the manifests job makes before it pushes, made here
+      # before anything is built, so a released version's image tag is never
+      # moved.
+      - name: Refuse to overwrite a release
+        env:
+          MANIFESTS: ${{ steps.tags.outputs.manifests }}
+        run: |
+          ref="oci://${MANIFESTS}:${GITHUB_REF_NAME}"
+          mkdir -p "${RUNNER_TEMP}/existing"
+          if out="$(flux pull artifact "$ref" --output "${RUNNER_TEMP}/existing" 2>&1)"; then
+            echo "::error::${ref} already exists. Release tags are immutable; cut a new tag."
+            exit 1
+          fi
+          if ! grep -Eq 'MANIFEST_UNKNOWN|NAME_UNKNOWN' <<<"$out"; then
+            echo "::error::Could not tell whether ${ref} exists; nothing was pushed."
+            printf '%s\n' "$out"
+            exit 1
+          fi
+          echo "${ref} is free."
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       # context: . builds from the checkout above (with .git); the action's
       # default Git context would clone without history. No registry cache:
@@ -174,6 +207,20 @@ jobs:
           echo "${KUSTOMIZE_SHA256}  ${tarball}" | sha256sum -c -
           tar -xzf "$tarball" -C "$dir" kustomize
           echo "$dir" >> "$GITHUB_PATH"
+      # A pinned release, checked against its published sha256. It goes
+      # ahead of the runner's own yq on PATH.
+      - name: Install yq
+        env:
+          YQ_VERSION: v4.54.1
+          YQ_SHA256: 8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f
+        run: |
+          dir="${RUNNER_TEMP}/yq"
+          mkdir -p "$dir"
+          curl -fsSL -o "${dir}/yq" \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  ${dir}/yq" | sha256sum -c -
+          chmod +x "${dir}/yq"
+          echo "$dir" >> "$GITHUB_PATH"
       # Whole-value checks (a newline fails them): each value reaches a
       # command line or the artifact's address.
       - name: Validate inputs
@@ -187,7 +234,7 @@ jobs:
             echo "::error::Unexpected artifact repository '${MANIFESTS}'."
             fail=1
           fi
-          if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" == *$'\n'* || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*$ ]]; then
+          if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" == *$'\n'* || ${#GITHUB_REF_NAME} -gt 128 || ! "$GITHUB_REF_NAME" =~ $VERSION_TAG_RE ]]; then
             echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
             fail=1
           fi
@@ -195,32 +242,18 @@ jobs:
       - name: Bake the image digest
         working-directory: k8s-do
         run: kustomize edit set image "knowledgebase=${IMAGE}"
-      # Fails closed on what the cluster would apply: every image is the one
-      # just pushed, by digest, and nothing in it is a Secret (the cluster
-      # never takes Secrets from a release).
+      # Fails closed on what the cluster would apply. yq turns the baked
+      # kustomization.yaml and the built objects into JSON, so quoting and
+      # flow style can't hide anything, and scripts/check-release.mjs
+      # allow-lists them: kustomization keys and local resources only, kinds
+      # Service, Deployment and Ingress, and every image the digest this run
+      # pushed. The cluster never takes Secrets from a release.
       - name: Check the release
         run: |
-          if grep -Eq '^[[:space:]]*(secretGenerator|configMapGenerator|generators):' k8s-do/kustomization.yaml; then
-            echo "::error::k8s-do/kustomization.yaml has a generator; a release holds no Secrets or generated objects."
-            exit 1
-          fi
-          built="$(kustomize build k8s-do)"
-          if grep -Eq '^kind:[[:space:]]*Secret[[:space:]]*$' <<<"$built"; then
-            echo "::error::The built release holds a Secret."
-            exit 1
-          fi
-          images="$(sed -nE 's/^[[:space:]-]*image:[[:space:]]*"?([^"[:space:]]*)"?[[:space:]]*$/\1/p' <<<"$built")"
-          if [ -z "$images" ]; then
-            echo "::error::The built release holds no image."
-            exit 1
-          fi
-          while IFS= read -r image; do
-            if [[ "$image" != "$IMAGE" || ! "$image" =~ ^ghcr\.io/[a-z0-9-]+/knowledgebase@sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::Image '${image}' in the built release is not the digest this run pushed."
-              exit 1
-            fi
-          done <<<"$images"
-          echo "The release pins ${IMAGE}."
+          kustomize build k8s-do > "${RUNNER_TEMP}/built.yaml"
+          yq -o=json -I=0 '.' k8s-do/kustomization.yaml > "${RUNNER_TEMP}/kustomization.jsonl"
+          yq -o=json -I=0 '.' "${RUNNER_TEMP}/built.yaml" > "${RUNNER_TEMP}/built.jsonl"
+          node scripts/check-release.mjs "${RUNNER_TEMP}/kustomization.jsonl" "${RUNNER_TEMP}/built.jsonl"
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io

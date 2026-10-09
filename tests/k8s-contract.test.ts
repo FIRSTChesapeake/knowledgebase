@@ -22,6 +22,121 @@ function ofKind(kind: string) {
   return appManifests().filter(({ doc }) => doc.kind === kind)
 }
 
+const SECCOMP_OK = ["RuntimeDefault", "Localhost"]
+
+// Every way a pod spec escapes the lockdown; [] when it holds. Walks
+// containers, initContainers and ephemeralContainers alike.
+function podSecurityProblems(pod: any): string[] {
+  const problems: string[] = []
+  const bad = (what: string) => problems.push(what)
+
+  for (const key of ["hostNetwork", "hostPID", "hostIPC", "shareProcessNamespace"]) {
+    if (pod[key] !== undefined && pod[key] !== false) bad(`pod ${key}`)
+  }
+  if (pod.hostUsers === true) bad("pod hostUsers")
+  if (pod.hostAliases !== undefined) bad("pod hostAliases")
+  for (const v of pod.volumes ?? []) {
+    if (v.hostPath !== undefined) bad(`volume ${v.name} is a hostPath`)
+    if (!v.emptyDir) bad(`volume ${v.name} is not an emptyDir`)
+  }
+
+  const psc = pod.securityContext ?? {}
+  if (psc.runAsNonRoot !== true) bad("pod runAsNonRoot is not true")
+  if (typeof psc.runAsUser !== "number" || psc.runAsUser === 0) bad("pod runAsUser is not a non-zero number")
+  if (psc.runAsGroup === 0) bad("pod runAsGroup 0")
+  if (psc.seccompProfile?.type !== "RuntimeDefault") bad("pod seccompProfile is not RuntimeDefault")
+  for (const key of ["seLinuxOptions", "windowsOptions"]) {
+    if (psc[key] !== undefined) bad(`pod ${key}`)
+  }
+
+  const all = [
+    ...(pod.containers ?? []).map((c: any) => ["container", c]),
+    ...(pod.initContainers ?? []).map((c: any) => ["initContainer", c]),
+    ...(pod.ephemeralContainers ?? []).map((c: any) => ["ephemeralContainer", c]),
+  ]
+  for (const [kind, c] of all) {
+    const at = `${kind} ${c.name}`
+    if (c.image !== "knowledgebase") bad(`${at} image ${c.image}`)
+    for (const p of c.ports ?? []) if (p.hostPort !== undefined) bad(`${at} hostPort ${p.hostPort}`)
+
+    const sc = c.securityContext ?? {}
+    if (sc.allowPrivilegeEscalation !== false) bad(`${at} allowPrivilegeEscalation is not false`)
+    if (sc.readOnlyRootFilesystem !== true) bad(`${at} readOnlyRootFilesystem is not true`)
+    if (sc.privileged !== undefined && sc.privileged !== false) bad(`${at} privileged`)
+    if (!sc.capabilities?.drop?.includes("ALL")) bad(`${at} does not drop ALL`)
+    if ((sc.capabilities?.add ?? []).length > 0) bad(`${at} adds capabilities`)
+    // Container settings override the pod's.
+    if (sc.runAsNonRoot === false) bad(`${at} runAsNonRoot false`)
+    if (sc.runAsUser === 0) bad(`${at} runAsUser 0`)
+    if (sc.runAsGroup === 0) bad(`${at} runAsGroup 0`)
+    for (const key of ["procMount", "seLinuxOptions", "windowsOptions"]) {
+      if (sc[key] !== undefined) bad(`${at} ${key}`)
+    }
+    if (sc.seccompProfile !== undefined && !SECCOMP_OK.includes(sc.seccompProfile.type)) {
+      bad(`${at} seccompProfile ${sc.seccompProfile.type}`)
+    }
+  }
+  return problems
+}
+
+// A locked-down extra container, so a case can break exactly one thing.
+function lockedDown(name: string): any {
+  return {
+    name,
+    image: "knowledgebase",
+    securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } },
+  }
+}
+
+const sc0 = (pod: any) => pod.containers[0].securityContext
+
+// Each case breaks the real pod spec in one way the checks must catch.
+const MUTATIONS: { name: string; mutate: (pod: any) => void }[] = [
+  { name: "capabilities.add NET_ADMIN", mutate: (p) => (sc0(p).capabilities.add = ["NET_ADMIN"]) },
+  { name: "capabilities.drop without ALL", mutate: (p) => (sc0(p).capabilities.drop = ["NET_RAW"]) },
+  { name: "container privileged", mutate: (p) => (sc0(p).privileged = true) },
+  { name: "container allowPrivilegeEscalation", mutate: (p) => (sc0(p).allowPrivilegeEscalation = true) },
+  { name: "container writable root", mutate: (p) => (sc0(p).readOnlyRootFilesystem = false) },
+  { name: "container runAsNonRoot false", mutate: (p) => (sc0(p).runAsNonRoot = false) },
+  { name: "container runAsUser 0", mutate: (p) => (sc0(p).runAsUser = 0) },
+  { name: "container runAsGroup 0", mutate: (p) => (sc0(p).runAsGroup = 0) },
+  { name: "container procMount Unmasked", mutate: (p) => (sc0(p).procMount = "Unmasked") },
+  { name: "container seLinuxOptions", mutate: (p) => (sc0(p).seLinuxOptions = { type: "spc_t" }) },
+  { name: "container windowsOptions", mutate: (p) => (sc0(p).windowsOptions = { hostProcess: true }) },
+  { name: "container seccomp Unconfined", mutate: (p) => (sc0(p).seccompProfile = { type: "Unconfined" }) },
+  { name: "container image busybox", mutate: (p) => (p.containers[0].image = "busybox") },
+  { name: "hostPort on a container port", mutate: (p) => (p.containers[0].ports[0].hostPort = 8080) },
+  { name: "pod hostNetwork", mutate: (p) => (p.hostNetwork = true) },
+  { name: "pod hostPID", mutate: (p) => (p.hostPID = true) },
+  { name: "pod hostIPC", mutate: (p) => (p.hostIPC = true) },
+  { name: "pod hostUsers true", mutate: (p) => (p.hostUsers = true) },
+  { name: "pod hostAliases", mutate: (p) => (p.hostAliases = [{ ip: "10.0.0.1", hostnames: ["x"] }]) },
+  { name: "pod shareProcessNamespace", mutate: (p) => (p.shareProcessNamespace = true) },
+  { name: "hostPath volume", mutate: (p) => p.volumes.push({ name: "host", hostPath: { path: "/" } }) },
+  // Past the emptyDir check, so only the hostPath check can catch it.
+  { name: "hostPath beside an emptyDir", mutate: (p) => (p.volumes[0].hostPath = { path: "/" }) },
+  { name: "pod windowsOptions", mutate: (p) => (p.securityContext.windowsOptions = { hostProcess: true }) },
+  { name: "pod runAsNonRoot false", mutate: (p) => (p.securityContext.runAsNonRoot = false) },
+  { name: "pod runAsUser 0", mutate: (p) => (p.securityContext.runAsUser = 0) },
+  { name: "pod runAsGroup 0", mutate: (p) => (p.securityContext.runAsGroup = 0) },
+  { name: "pod seccomp Unconfined", mutate: (p) => (p.securityContext.seccompProfile = { type: "Unconfined" }) },
+  { name: "pod seLinuxOptions", mutate: (p) => (p.securityContext.seLinuxOptions = { type: "spc_t" }) },
+  { name: "initContainer image busybox", mutate: (p) => (p.initContainers = [{ ...lockedDown("init"), image: "busybox" }]) },
+  { name: "initContainer without the lockdown", mutate: (p) => (p.initContainers = [{ name: "init", image: "knowledgebase" }]) },
+  {
+    name: "initContainer adds a capability",
+    mutate: (p) => {
+      const c = lockedDown("init")
+      c.securityContext.capabilities.add = ["SYS_ADMIN"]
+      p.initContainers = [c]
+    },
+  },
+  { name: "initContainer privileged", mutate: (p) => (p.initContainers = [{ ...lockedDown("init"), securityContext: { ...lockedDown("init").securityContext, privileged: true } }]) },
+  { name: "ephemeralContainer image busybox", mutate: (p) => (p.ephemeralContainers = [{ ...lockedDown("debug"), image: "busybox" }]) },
+  { name: "ephemeralContainer without the lockdown", mutate: (p) => (p.ephemeralContainers = [{ name: "debug", image: "knowledgebase" }]) },
+  { name: "ephemeralContainer runAsUser 0", mutate: (p) => (p.ephemeralContainers = [{ ...lockedDown("debug"), securityContext: { ...lockedDown("debug").securityContext, runAsUser: 0 } }]) },
+]
+
 describe("kustomization.yaml", () => {
   const k = kustomization()
 
@@ -106,6 +221,29 @@ describe("non-root, read-only root, limits set", () => {
 
   for (const { file, doc } of deployments) {
     const pod = doc.spec.template.spec
+
+    test(`${file}: the pod spec has no security problems`, () => {
+      assert.deepEqual(podSecurityProblems(pod), [])
+    })
+
+    describe(`${file}: each security check bites`, () => {
+      // The control: lockedDown() extras alone must pass, so each case below
+      // fails only for the one thing it breaks.
+      test("a locked-down initContainer and ephemeralContainer pass", () => {
+        const p = structuredClone(pod)
+        p.initContainers = [lockedDown("init")]
+        p.ephemeralContainers = [lockedDown("debug")]
+        assert.deepEqual(podSecurityProblems(p), [])
+      })
+
+      for (const { name, mutate } of MUTATIONS) {
+        test(name, () => {
+          const p = structuredClone(pod)
+          mutate(p)
+          assert.notDeepEqual(podSecurityProblems(p), [], name)
+        })
+      }
+    })
 
     test(`${file}: every container is locked down and bounded`, () => {
       for (const c of [...(pod.initContainers ?? []), ...pod.containers]) {

@@ -32,15 +32,18 @@ function stubs(dir: string): void {
   )
 }
 
-type Run = { status: number | null; out: string; gh: string[] }
+type Run = { status: number | null; out: string; gh: string[]; dir: string }
 
-function runScript(script: string, env: Record<string, string>, args: string[] = []): Run {
+// The env file's text, or a function of the run's directory (for paths in it).
+type EnvFile = string | ((dir: string) => string)
+
+function runScript(script: string, env: Record<string, string>, args: string[] = [], envText: EnvFile = ""): Run {
   const dir = freshDir()
   stubs(dir)
   const file = (name: string) => path.join(dir, name)
   fs.writeFileSync(file("gh-calls"), "")
   const envFile = file("env")
-  fs.writeFileSync(envFile, "")
+  fs.writeFileSync(envFile, typeof envText === "function" ? envText(dir) : envText)
   const r = spawnSync("bash", [repoPath(script), ...args], {
     env: {
       PATH: `${dir}:${process.env.PATH}`,
@@ -56,12 +59,13 @@ function runScript(script: string, env: Record<string, string>, args: string[] =
     status: r.status,
     out: r.stdout + r.stderr,
     gh: fs.readFileSync(file("gh-calls"), "utf8").split("\n").filter(Boolean),
+    dir,
   }
 }
 
 describe("every script is strict", () => {
   test("there are scripts to check", () => {
-    assert.ok(scripts.includes("scripts/upload-github-secrets.sh"))
+    assert.ok(scripts.includes("scripts/set-github-variables.sh"))
   })
 
   for (const file of scripts) {
@@ -83,8 +87,13 @@ describe("every script is strict", () => {
   }
 })
 
-describe("upload-github-secrets.sh", () => {
-  const script = "scripts/upload-github-secrets.sh"
+describe("set-github-variables.sh", () => {
+  const script = "scripts/set-github-variables.sh"
+  const varSets = (r: Run) => r.gh.filter((c) => c.startsWith("variable set"))
+
+  test("replaces upload-github-secrets.sh, which set no secret", () => {
+    assert.ok(!fs.existsSync(repoPath("scripts/upload-github-secrets.sh")))
+  })
 
   test("sets the repo variable APP_DOMAIN and nothing else", () => {
     const r = runScript(script, { APP_DOMAIN: "kb.example.org", K8S_NAMESPACE: "kb", KUBECONFIG_KB_FILE: "/dev/null" })
@@ -104,6 +113,68 @@ describe("upload-github-secrets.sh", () => {
     const r = runScript(script, { APP_DOMAIN: "kb.example.org" }, ["kb.example.org"])
     assert.notEqual(r.status, 0)
     assert.equal(r.gh.length, 0)
+  })
+
+  test("reads APP_DOMAIN from the env file", () => {
+    const r = runScript(script, {}, [], "# comment\n\nAPP_DOMAIN=kb.example.org\n")
+    assert.equal(r.status, 0, r.out)
+    assert.deepEqual(varSets(r), [`variable set APP_DOMAIN --repo ${REPO} --body kb.example.org`])
+  })
+
+  test("the env file is read as data, never run", () => {
+    const text = (dir: string) =>
+      [`APP_DOMAIN=$(touch ${path.join(dir, "marker-subst")})`, `touch ${path.join(dir, "marker-bare")}`, ""].join("\n")
+    const r = runScript(script, {}, [], text)
+    for (const m of ["marker-subst", "marker-bare"]) {
+      assert.ok(!fs.existsSync(path.join(r.dir, m)), `${m} was created: the env file ran`)
+    }
+    assert.notEqual(r.status, 0, "a bare command is not a KEY=value line")
+    assert.deepEqual(varSets(r), [])
+  })
+
+  for (const value of ["$(touch MARKER)", "`touch MARKER`", "${HOME}x", "a;touch MARKER"]) {
+    test(`takes ${value} literally`, () => {
+      let literal = ""
+      const r = runScript(script, {}, [], (dir) => {
+        literal = value.replace("MARKER", path.join(dir, "marker"))
+        return `APP_DOMAIN=${literal}\n`
+      })
+      assert.equal(r.status, 0, r.out)
+      assert.ok(!fs.existsSync(path.join(r.dir, "marker")), "the value ran")
+      assert.deepEqual(varSets(r), [`variable set APP_DOMAIN --repo ${REPO} --body ${literal}`])
+    })
+  }
+
+  for (const [line, want] of [
+    ['APP_DOMAIN="kb.example.org"', "kb.example.org"],
+    ["APP_DOMAIN='kb.example.org'", "kb.example.org"],
+    ["APP_DOMAIN=\"kb.example.org'", "\"kb.example.org'"],
+    ["APP_DOMAIN=\"a b\"", "a b"],
+  ]) {
+    test(`unquotes ${line}`, () => {
+      const r = runScript(script, {}, [], `${line}\n`)
+      assert.equal(r.status, 0, r.out)
+      assert.deepEqual(varSets(r), [`variable set APP_DOMAIN --repo ${REPO} --body ${want}`])
+    })
+  }
+
+  for (const line of ["not a pair", "lower=x", "export APP_DOMAIN=x", " APP_DOMAIN=x", "1APP=x"]) {
+    test(`rejects the line ${JSON.stringify(line)}`, () => {
+      const r = runScript(script, {}, [], `APP_DOMAIN=kb.example.org\n${line}\n`)
+      assert.notEqual(r.status, 0, r.out)
+      assert.match(r.out, /not a KEY=value line/)
+      assert.deepEqual(varSets(r), [])
+    })
+  }
+})
+
+describe(".env stays out of the image", () => {
+  test(".dockerignore excludes .env", () => {
+    const lines = readText(".dockerignore").split("\n").map((l) => l.trim())
+    assert.ok(
+      lines.some((l) => [".env", "/.env", "**/.env", ".env*"].includes(l)),
+      ".dockerignore lets .env into the build context",
+    )
   })
 })
 

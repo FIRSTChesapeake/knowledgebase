@@ -50,13 +50,20 @@ reviewed by a cluster admin, never from this repo.
 1. Merge to `main`.
 2. Push a version tag `vX.Y.Z` on a commit on `main`. Only maintainers can
    (tag ruleset, below).
-3. The workflow checks the commit is on `main`, then:
+3. The workflow checks the commit is on `main` and the tag is a SemVer
+   version, then:
+   - refuses a version already published, before building anything;
    - builds and pushes the image `ghcr.io/firstchesapeake/knowledgebase`,
-     tagged with the version and `sha-<commit>`;
+     tagged with the version only;
    - bakes the image's digest into `k8s-do/`, checks the built release
-     (every image pinned to that digest, no Secret), refuses a version
-     already published, and pushes the artifact
+     (`scripts/check-release.mjs`: only a Service, Deployment and Ingress,
+     every image pinned to that digest, no namespace, and a kustomization
+     that pulls in or generates nothing else), checks again that the
+     version is unpublished, and pushes the artifact
      `oci://ghcr.io/firstchesapeake/manifests/knowledgebase:vX.Y.Z`.
+
+   Runs for the same tag queue rather than overlap, so two can't both
+   find a version free.
 4. The cluster polls for new artifacts every 2 minutes and deploys the
    highest version within its range, so the release is live within about
    2–4 minutes. Slack reports the new version and the result of the
@@ -89,7 +96,7 @@ keep serving, and Slack reports the failure.
 
 - Repo variable `APP_DOMAIN` (the site's hostname), read by the image
   build. It is pushed from an ignored `.env`: copy `.env.example` to
-  `.env`, fill it in, and run `scripts/upload-github-secrets.sh` (needs
+  `.env`, fill it in, and run `scripts/set-github-variables.sh` (needs
   `gh`, logged in with admin rights on the repo). A value left empty is
   skipped with a warning. Nothing else is stored in GitHub: no cluster
   credential, no secret.
@@ -122,16 +129,30 @@ required before the first release:
   workflow on a branch can drop it.
 - A **tag ruleset** targeting `v*`: restrict creations, updates and
   deletions to maintainers, with no bypass for anyone else.
-- Optional hardening: a **branch ruleset** on all branches that restricts
-  changes to `.github/workflows/**` to maintainers.
+- **Only maintainers can change workflows.** Any workflow that asks for
+  `packages: write`, including one edited on a branch, can push a
+  deployable `manifests/knowledgebase:vX.Y.Z` with the repo's token,
+  skipping the guard, the environment, the tag ruleset and `main`. The
+  cluster would deploy it if its version is the highest. So one of these is
+  required:
+  - a **push ruleset** (Settings → Rules → Rulesets → New ruleset → New
+    push ruleset): name `workflows`, **Enforcement status** Active,
+    **Bypass list** only the roles maintainers hold (Repository admin, and
+    Maintain if they use it), rule
+    **Restrict file paths** with the path `.github/workflows/**`. It applies
+    to every branch and refuses a push that changes a workflow from anyone
+    not on the bypass list;
+  - or, if GitHub does not offer push rulesets for this repo (they depend
+    on the plan and the repo's visibility), **write access for maintainers
+    only** (Settings → Collaborators and teams): everyone else gets Read or
+    Triage and contributes by pull request from a fork. A fork's pull
+    request runs with a read-only token and can push nothing.
+- Branch protection on `main` requires the **Light tests** and
+  **actionlint** checks (the Tests workflow), so nothing is merged, and
+  then released, without the contract tests passing.
 
-**What these do not cover.** Any workflow in this repo that asks for
-`packages: write`, including one edited on a branch, can push to the
-packages with the repo's token, with no tag and no `main`. So who can
-release is, in effect, who can write to this repo. Forks cannot: a fork's
-pull request gets a read-only token. What a release can do on the cluster
-is still bounded there: the version range, the deployer Role and the
-admission policies in the config repo.
+What a release can do on the cluster is still bounded there: the version
+range, the deployer Role and the admission policies in the config repo.
 
 ## Cutover checklist
 

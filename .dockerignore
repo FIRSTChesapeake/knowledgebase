@@ -13,3 +13,6 @@ plugins/note-properties/dist
 k8s-do
 tests
 *.log
+# Local settings, never part of the image.
+.env
+.env.*
