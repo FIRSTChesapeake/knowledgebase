@@ -13,7 +13,7 @@ body:
     attributes:
       label: Link to Article
       description: Which article has the issue?
-      placeholder: ex. https://firstchesapeake.github.io/knowledgebase/[....]
+      placeholder: ex. https://kb.firstchs.org/[....]
     validations:
       required: true
   - type: textarea
