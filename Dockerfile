@@ -4,7 +4,7 @@
 # nginx serves it. Build with
 #   docker build --build-arg APP_DOMAIN=kb.example.org .
 # APP_DOMAIN becomes Quartz's baseUrl (sitemap, RSS, canonical links); the
-# committed quartz.config.yaml keeps the GitHub Pages value.
+# committed quartz.config.yaml holds the production host as a default.
 
 # The full (non-slim) node image: the quartz CLI shells out to git at import
 # time and crashes without the binary, and git history gives page dates.
