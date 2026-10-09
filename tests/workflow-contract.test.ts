@@ -87,11 +87,10 @@ describe("permissions", () => {
     assert.equal(wf.permissions.packages, undefined, "no workflow-level packages permission")
   })
 
-  test("only the Pages deploy job holds id-token or pages write", () => {
-    // actions/deploy-pages needs id-token; no release job does (no signing).
+  test("no job holds id-token or pages write: no signing, and GitHub Pages is not published", () => {
     for (const [name, job] of Object.entries(jobs)) {
-      const holds = job.permissions?.pages === "write" || job.permissions?.["id-token"] === "write"
-      assert.equal(holds, name === "deploy", name)
+      assert.equal(job.permissions?.pages, undefined, name)
+      assert.equal(job.permissions?.["id-token"], undefined, name)
     }
   })
 
@@ -113,7 +112,7 @@ describe("expressions stay out of shell scripts", () => {
 
   test("every uses: is pinned to a full commit SHA with its version beside it", () => {
     const uses = steps().filter(({ step }) => step.uses)
-    assert.ok(uses.length >= 10)
+    assert.ok(uses.length >= 8)
     for (const { job, step } of uses) assert.match(step.uses, /^[a-z0-9-]+\/[a-z0-9-]+(\/[a-z0-9-]+)?@[0-9a-f]{40}$/, `${job}: ${step.uses}`)
     // YAML parsing drops comments: check the raw lines for the version.
     const lines = raw.split("\n").filter((l) => /^\s*(- )?uses: /.test(l))
@@ -349,12 +348,14 @@ describe("manifests job", () => {
   })
 })
 
-describe("GitHub Pages keeps publishing", () => {
-  test("Pages build and deploy jobs share the pages concurrency group", () => {
-    for (const name of ["build", "deploy"]) {
-      assert.equal(jobs[name].concurrency.group, "pages", name)
-      assert.equal(jobs[name].concurrency["cancel-in-progress"], false, name)
-    }
+describe("GitHub Pages is retired", () => {
+  test("the jobs are exactly guard, image and manifests", () => {
+    assert.deepEqual(Object.keys(jobs).sort(), ["guard", "image", "manifests"])
+  })
+
+  test("no Pages action, pages concurrency group or github-pages environment", () => {
+    assert.ok(!/upload-pages-artifact|deploy-pages|github-pages/.test(raw))
+    for (const [name, job] of Object.entries(jobs)) assert.notEqual(job.concurrency?.group, "pages", name)
     assert.equal(wf.concurrency, undefined, "no workflow-level group")
   })
 })

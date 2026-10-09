@@ -58,7 +58,7 @@ To publish everything currently on 'main':
 
 Without a terminal: on GitHub, go to [Releases](https://github.com/FIRSTChesapeake/Knowledgebase/releases) → "Draft a new release" → "Choose a tag", type the new version (e.g. `v26.7.0`) and select "Create new tag on publish", make sure the target is 'main', then select "Publish release".
 
-Either way, you can watch the publish on the [Actions](https://github.com/FIRSTChesapeake/Knowledgebase/actions) tab under "Deploy knowledgebase". It usually takes a few minutes; once it shows a green check, the website is updated. Only commits that are already on 'main' can be published: a tag on any other branch will fail. The same tag also releases the site to the CHS cluster, which picks up the new version on its own a few minutes after the run finishes (see `k8s-do/README.md`).
+Either way, you can watch the publish on the [Actions](https://github.com/FIRSTChesapeake/Knowledgebase/actions) tab under "Deploy knowledgebase". Only commits that are already on 'main' can be published: a tag on any other branch will fail. The website is served from the CHS cluster at https://kb.firstchs.org, which picks up the new version on its own a few minutes after the run shows a green check (see `k8s-do/README.md`). The old GitHub Pages copy is no longer updated.
 
 # Updating Quartz
 The site is built with [Quartz](https://github.com/jackyzha0/quartz) 5, imported from upstream commit `97a2d05` (the `v5` branch on 2026-09-20). The framework files (`quartz/`, `package.json`, `package-lock.json`, `quartz.ts`, `quartz.config.default.yaml` and the other root build files) are a copy of upstream. The site's own settings live in `quartz.config.yaml`, and its style changes in `quartz/styles/custom.scss`.

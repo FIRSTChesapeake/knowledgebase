@@ -3,8 +3,8 @@
 The knowledgebase runs on the CHS cluster as a static nginx image (see the
 repo's `Dockerfile`): Quartz builds the site inside the image build, and
 nginx serves it. The `Deploy knowledgebase` workflow
-(`.github/workflows/deploy.yml`) publishes each version tag to GitHub Pages
-and releases it to the cluster.
+(`.github/workflows/deploy.yml`) releases each version tag to the cluster,
+the site's only home: GitHub Pages is no longer published.
 
 Nothing here deploys anything. A release pushes two packages to GHCR, the
 image and a release artifact of this directory, and the cluster pulls the
@@ -33,8 +33,9 @@ credential and no secret but its own `GITHUB_TOKEN`.
 
 The site's hostname is set twice and must match: the repo variable
 `APP_DOMAIN` is baked into the image as Quartz's `baseUrl` (links, sitemap,
-RSS), and the config repo's `APP_DOMAIN` is the Ingress host. The committed
-`quartz.config.yaml` keeps the GitHub Pages `baseUrl`.
+RSS), and the config repo's `APP_DOMAIN` is the Ingress host. The image
+build replaces the `baseUrl` in `quartz.config.yaml` with `APP_DOMAIN`, so
+the committed value is not what the site uses.
 
 ## Where the hardening lives
 
@@ -50,7 +51,6 @@ reviewed by a cluster admin, never from this repo.
 2. Push a version tag `vX.Y.Z` on a commit on `main`. Only maintainers can
    (tag ruleset, below).
 3. The workflow checks the commit is on `main`, then:
-   - publishes GitHub Pages;
    - builds and pushes the image `ghcr.io/firstchesapeake/knowledgebase`,
      tagged with the version and `sha-<commit>`;
    - bakes the image's digest into `k8s-do/`, checks the built release
@@ -122,8 +122,6 @@ required before the first release:
   workflow on a branch can drop it.
 - A **tag ruleset** targeting `v*`: restrict creations, updates and
   deletions to maintainers, with no bypass for anyone else.
-- Environment `github-pages`: add the tag rule `v*` to its deployment
-  branches and tags, or the tag-triggered Pages deploy is refused.
 - Optional hardening: a **branch ruleset** on all branches that restricts
   changes to `.github/workflows/**` to maintainers.
 
@@ -137,8 +135,8 @@ admission policies in the config repo.
 
 ## Cutover checklist
 
-1. Release (push a version tag on `main`) while GitHub Pages is still live.
-   Make both GHCR packages public if this is the first release.
+1. Release (push a version tag on `main`). Make both GHCR packages public if
+   this is the first release.
 2. Point a DNS record for the `APP_DOMAIN` host at the ingress load balancer.
 3. Wait until the `knowledgebase-tls` Certificate is Ready:
    `kubectl -n kb get certificate knowledgebase-tls`.
@@ -148,5 +146,7 @@ admission policies in the config repo.
    - a deep link to a page, and a folder page (e.g. `/FRC/`);
    - a missing page shows the 404 page with status 404;
    - `/sitemap.xml` and `/index.xml` list URLs on the new host.
-5. Then update links to the site, and retire GitHub Pages after the grace
-   period.
+5. Update links to the site to the new host. GitHub Pages is no longer
+   updated: its last copy stays up, stale, until Pages is turned off in the
+   repo settings (Settings → Pages). The `github-pages` environment is no
+   longer used.
