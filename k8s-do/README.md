@@ -56,9 +56,11 @@ reviewed by a cluster admin, never from this repo.
    - builds and pushes the image `ghcr.io/firstchesapeake/knowledgebase`,
      tagged with the version only;
    - bakes the image's digest into `k8s-do/`, checks the built release
-     (`scripts/check-release.mjs`: only a Service, Deployment and Ingress,
-     every image pinned to that digest, no namespace, and a kustomization
-     that pulls in or generates nothing else), checks again that the
+     (`scripts/check-release.mjs`: only a core Service, Deployment and
+     Ingress, every image pinned to that digest, no namespace, nothing
+     for the cluster to substitute but the Ingress host `${APP_DOMAIN}`,
+     no YAML merge keys, and a kustomization that pulls in or generates
+     nothing else), checks again that the
      version is unpublished, and pushes the artifact
      `oci://ghcr.io/firstchesapeake/manifests/knowledgebase:vX.Y.Z`.
 

@@ -257,12 +257,30 @@ describe("permissions", () => {
 })
 
 describe("expressions stay out of shell scripts", () => {
-  test("no ${{ }} inside run:", () => {
-    for (const { job, step } of steps()) {
-      if (!step.run) continue
-      assert.ok(!/\$\{\{/.test(step.run), `${job} / ${step.name ?? step.run.slice(0, 40)}`)
+  // Every step with a run: whose script holds an expression, as job/step.
+  function expressionsInRun(w: any): string[] {
+    const found: string[] = []
+    for (const [job, j] of Object.entries<any>(w.jobs ?? {})) {
+      for (const step of j.steps ?? []) {
+        if (typeof step.run === "string" && /\$\{\{/.test(step.run)) found.push(`${job} / ${step.name ?? step.run.slice(0, 40)}`)
+      }
     }
-  })
+    return found
+  }
+
+  for (const file of [".github/workflows/deploy.yml", ".github/workflows/test.yml"]) {
+    test(`no \${{ }} inside run: in ${file}`, () => {
+      const w = loadYaml(file)
+      assert.ok(Object.values<any>(w.jobs).some((j) => j.steps?.some((s: any) => s.run)), "no run: steps to check")
+      assert.deepEqual(expressionsInRun(w), [])
+      // The check sees an expression put into any job's script.
+      for (const job of Object.keys(w.jobs)) {
+        const m = structuredClone(w)
+        m.jobs[job].steps = [...(m.jobs[job].steps ?? []), { name: "x", run: 'echo "${{ github.head_ref }}"' }]
+        assert.deepEqual(expressionsInRun(m), [`${job} / x`], job)
+      }
+    })
+  }
 
   test("every uses: is pinned to a full commit SHA with its version beside it", () => {
     const uses = steps().filter(({ step }) => step.uses)
@@ -335,6 +353,7 @@ describe("image job", () => {
     const out = path.join(scratchDir(), "output")
     fs.writeFileSync(out, "")
     const r = runBash(tags.run, {
+      VERSION_TAG_RE: wf.env.VERSION_TAG_RE,
       GITHUB_REPOSITORY_OWNER: "FIRSTChesapeake",
       GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
       GITHUB_REF_TYPE: "tag",
@@ -416,6 +435,33 @@ describe("one release definition, one run per tag", () => {
     for (const tag of GOOD_TAGS) assert.ok(re.test(tag), tag)
     for (const tag of BAD_TAGS.filter((t) => t.length <= 128 && !t.includes("\n"))) assert.ok(!re.test(tag), tag)
   })
+
+  // An empty pattern matches every tag: both checks must refuse to run
+  // without one rather than admit anything.
+  for (const [job, pick] of [
+    ["image", (x: any) => x.id === "tags"],
+    ["manifests", (x: any) => x.name === "Validate inputs"],
+  ] as const) {
+    test(`${job}: an unset or empty VERSION_TAG_RE admits no tag`, () => {
+      const step = jobs[job].steps.find(pick)
+      const out = path.join(scratchDir(), "output")
+      const env = {
+        IMAGE,
+        MANIFESTS,
+        GITHUB_REPOSITORY_OWNER: "firstchesapeake",
+        GITHUB_REF_TYPE: "tag",
+        GITHUB_REF_NAME: "v1.2.3,ghcr.io/firstchesapeake/knowledgebase:latest",
+        GITHUB_OUTPUT: out,
+      }
+      for (const re of [undefined, ""]) {
+        fs.writeFileSync(out, "")
+        const r = runBash(step.run, re === undefined ? env : { ...env, VERSION_TAG_RE: re })
+        assert.notEqual(r.status, 0, `VERSION_TAG_RE=${JSON.stringify(re)}: ${r.stdout}`)
+        assert.match(r.stdout, /VERSION_TAG_RE is not set/)
+        assert.equal(fs.readFileSync(out, "utf8"), "")
+      }
+    })
+  }
 
   test("runs for the same tag queue, never cancel, never run side by side", () => {
     assert.deepEqual(wf.concurrency, { group: "release-${{ github.ref_name }}", "cancel-in-progress": false })
@@ -524,20 +570,53 @@ describe("manifests job", () => {
       `  digest: ${DIGEST}`,
       "",
     ].join("\n")
-    const pinned = (img: string) => `kind: Deployment\nmetadata:\n  name: knowledgebase\nspec:\n  template:\n    spec:\n      containers:\n      - image: ${img}\n        name: knowledgebase\n`
-    const OK = pinned(IMAGE) + "---\nkind: Service\nmetadata:\n  name: knowledgebase\n---\nkind: Ingress\nmetadata:\n  name: knowledgebase\nspec:\n  rules:\n  - host: ${APP_DOMAIN}\n"
-    // What yq makes of a YAML file: one JSON document per line.
-    const jsonl = (yaml: string) =>
-      parseAllDocuments(yaml)
-        .map((d) => {
-          if (d.errors.length > 0) throw new Error(d.errors[0].message)
-          return JSON.stringify(d.toJS())
-        })
-        .join("\n") + "\n"
+    const pinned = (img: string) =>
+      `apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: knowledgebase\nspec:\n  template:\n    spec:\n      containers:\n      - image: ${img}\n        name: knowledgebase\n`
+    const SERVICE = "apiVersion: v1\nkind: Service\nmetadata:\n  name: knowledgebase\n"
+    const INGRESS = [
+      "apiVersion: networking.k8s.io/v1",
+      "kind: Ingress",
+      "metadata:",
+      "  name: knowledgebase",
+      "spec:",
+      "  tls:",
+      "  - hosts:",
+      "    - ${APP_DOMAIN}",
+      "    secretName: knowledgebase-tls",
+      "  rules:",
+      "  - host: ${APP_DOMAIN}",
+      "",
+    ].join("\n")
+    const OK = [pinned(IMAGE), SERVICE, INGRESS].join("---\n")
+    // The release step's yq, when it is on PATH at the pinned version (the
+    // light container has none); otherwise the yaml library. Both make what
+    // the step makes: one JSON document per line.
+    // As the step writes them: the last is the shell-quoted expression.
+    const YQ_ARGS = ["--yaml-fix-merge-anchor-to-spec", "-o=json", "-I=0", "'explode(.)'"]
+    const yqVersion = named("Install yq").env.YQ_VERSION.replace(/^v/, "")
+    const yq = spawnSync("yq", ["--version"], { encoding: "utf8" })
+    const haveYq = yq.status === 0 && yq.stdout.includes(`version v${yqVersion}`)
+    function jsonl(yaml: string, dir: string): string {
+      if (haveYq) {
+        const src = path.join(dir, "in.yaml")
+        fs.writeFileSync(src, yaml)
+        const r = spawnSync("yq", [...YQ_ARGS.slice(0, -1), "explode(.)", src], { encoding: "utf8" })
+        if (r.status !== 0) throw new Error(r.stderr)
+        return r.stdout
+      }
+      return (
+        parseAllDocuments(yaml)
+          .map((d) => {
+            if (d.errors.length > 0) throw new Error(d.errors[0].message)
+            return JSON.stringify(d.toJS())
+          })
+          .join("\n") + "\n"
+      )
+    }
     function check(built: string, kustomization = BAKED, image = IMAGE) {
       const dir = scratchDir()
-      fs.writeFileSync(path.join(dir, "k.jsonl"), jsonl(kustomization))
-      fs.writeFileSync(path.join(dir, "b.jsonl"), jsonl(built))
+      fs.writeFileSync(path.join(dir, "k.jsonl"), jsonl(kustomization, dir))
+      fs.writeFileSync(path.join(dir, "b.jsonl"), jsonl(built, dir))
       const r = spawnSync(process.execPath, [repoPath("scripts/check-release.mjs"), path.join(dir, "k.jsonl"), path.join(dir, "b.jsonl")], {
         env: { PATH: process.env.PATH, IMAGE: image },
         encoding: "utf8",
@@ -548,8 +627,8 @@ describe("manifests job", () => {
     test("builds, converts with yq and checks with scripts/check-release.mjs", () => {
       assert.deepEqual(run.trim().split("\n"), [
         'kustomize build k8s-do > "${RUNNER_TEMP}/built.yaml"',
-        `yq -o=json -I=0 '.' k8s-do/kustomization.yaml > "\${RUNNER_TEMP}/kustomization.jsonl"`,
-        `yq -o=json -I=0 '.' "\${RUNNER_TEMP}/built.yaml" > "\${RUNNER_TEMP}/built.jsonl"`,
+        `yq ${YQ_ARGS.join(" ")} k8s-do/kustomization.yaml > "\${RUNNER_TEMP}/kustomization.jsonl"`,
+        `yq ${YQ_ARGS.join(" ")} "\${RUNNER_TEMP}/built.yaml" > "\${RUNNER_TEMP}/built.jsonl"`,
         'node scripts/check-release.mjs "${RUNNER_TEMP}/kustomization.jsonl" "${RUNNER_TEMP}/built.jsonl"',
       ])
     })
@@ -579,9 +658,9 @@ describe("manifests job", () => {
         ["quoted Secret", pinned(IMAGE) + '---\nkind: "Secret"\nmetadata:\n  name: x\n'],
         ["single-quoted Secret", pinned(IMAGE) + "---\nkind: 'Secret'\nmetadata:\n  name: x\n"],
         ["flow-style Secret", pinned(IMAGE) + "---\n{kind: Secret, metadata: {name: x}}\n"],
-        ["flow-style containers", "kind: Deployment\nmetadata: {name: knowledgebase}\nspec: {template: {spec: {containers: [{image: busybox, name: x}]}}}\n"],
+        ["flow-style containers", "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: knowledgebase}\nspec: {template: {spec: {containers: [{image: busybox, name: x}]}}}\n"],
         ["an initContainer", pinned(IMAGE).replace("      containers:", "      initContainers:\n      - {image: busybox, name: init}\n      containers:")],
-        ["a quoted image key", pinned(IMAGE) + '---\nkind: Deployment\nmetadata:\n  name: other\nspec:\n  template:\n    spec:\n      containers:\n      - "image": busybox\n'],
+        ["a quoted image key", pinned(IMAGE) + '---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: other\nspec:\n  template:\n    spec:\n      containers:\n      - "image": busybox\n'],
         ["a ConfigMap", pinned(IMAGE) + "---\nkind: ConfigMap\nmetadata:\n  name: x\n"],
         ["a ClusterRoleBinding", pinned(IMAGE) + "---\nkind: ClusterRoleBinding\nmetadata:\n  name: x\n"],
         ["a namespace", pinned(IMAGE).replace("  name: knowledgebase\n", "  name: knowledgebase\n  namespace: kube-system\n")],
@@ -614,6 +693,79 @@ describe("manifests job", () => {
       assert.notEqual(check(OK, BAKED.replace("a1a1", "b2b2")).status, 0, "another digest")
       assert.notEqual(check(OK, BAKED + "- name: other\n  newName: x\n").status, 0, "a second image")
       assert.notEqual(check(OK, BAKED, "ghcr.io/firstchesapeake/knowledgebase:v1").status, 0, "IMAGE not a digest")
+    })
+
+    test("passes the real manifests, image pinned as kustomize pins it", () => {
+      const files = ["service.yaml", "deployment.yaml", "ingress.yaml"].map((f) => readText(`k8s-do/${f}`))
+      const built = files.join("\n---\n").replace(/^(\s*)image: knowledgebase$/m, `$1image: ${IMAGE}`)
+      assert.ok(built.includes(IMAGE))
+      const r = check(built)
+      assert.equal(r.status, 0, r.out)
+    })
+
+    test("converts with the release step's pinned yq", { skip: haveYq ? false : `yq v${yqVersion} is not on PATH` }, () => {
+      // Runs only where that yq is installed; every check above then goes
+      // through it.
+      assert.equal(check(OK).status, 0)
+    })
+
+    test("refuses a custom resource that borrows a core kind's name", () => {
+      const swaps: [string, string][] = [
+        ["Deployment", "apiVersion: apps/v1\n"],
+        ["Service", "apiVersion: v1\n"],
+        ["Ingress", "apiVersion: networking.k8s.io/v1\n"],
+      ]
+      for (const [kind, line] of swaps) {
+        for (const other of ["evil.example.com/v1", "extensions/v1beta1", ""]) {
+          const built = OK.replace(line, other ? `apiVersion: ${other}\n` : "")
+          assert.notEqual(built, OK)
+          const r = check(built)
+          assert.notEqual(r.status, 0, `${other || "no apiVersion"} ${kind}`)
+          assert.match(r.out, /is not allowed/)
+        }
+      }
+    })
+
+    test("leaves the cluster nothing to substitute but a whole ${APP_DOMAIN} host", () => {
+      const cases: [string, string][] = [
+        // The cluster substitutes keys too: this becomes an image: key there.
+        ["a ${} key", pinned(IMAGE).replace("        name: knowledgebase", "        ${X:=image}: busybox\n        name: knowledgebase")],
+        ["a $ in a key", pinned(IMAGE).replace("  name: knowledgebase\n", "  name: knowledgebase\n  labels:\n    $x: y\n")],
+        ["a ${} value outside the Ingress", pinned(IMAGE).replace("  name: knowledgebase\n", "  name: knowledgebase\n  annotations:\n    a: ${NS}\n")],
+        ["${APP_DOMAIN} outside a host", OK.replace("secretName: knowledgebase-tls", "secretName: ${APP_DOMAIN}")],
+        ["another variable as the host", OK.replace("  - host: ${APP_DOMAIN}", "  - host: ${OTHER}")],
+        ["a host built around ${APP_DOMAIN}", OK.replace("    - ${APP_DOMAIN}", "    - x.${APP_DOMAIN}")],
+        ["a default in the substitution", OK.replace("  - host: ${APP_DOMAIN}", "  - host: ${APP_DOMAIN:=evil.example}")],
+        ["${APP_DOMAIN} as a Deployment host", pinned(IMAGE).replace("  name: knowledgebase\n", "  name: knowledgebase\nspec2:\n  rules:\n  - host: ${APP_DOMAIN}\n")],
+      ]
+      for (const [name, built] of cases) {
+        const r = check(built)
+        assert.notEqual(r.status, 0, name)
+        assert.match(r.out, /(key|substitution) /, name)
+      }
+    })
+
+    test("refuses a merge key, which the cluster's decoder would resolve", () => {
+      // An anchor is fine where its alias expands to an allowed value...
+      const alias = pinned(IMAGE).replace("  name: knowledgebase\n", "  name: &n knowledgebase\n  labels: {app: *n}\n")
+      assert.equal(check(alias).status, 0, check(alias).out)
+      // ...but an alias can't smuggle in another image, and a merge key
+      // can't add a field the check would not see, such as a namespace.
+      const aliasImage = pinned("*img").replace("  name: knowledgebase\n", "  name: knowledgebase\n  labels: {x: &img busybox}\n")
+      assert.notEqual(check(aliasImage).status, 0, "an aliased image")
+      for (const merge of [
+        "<<: {namespace: kube-system}",
+        "<<: [{namespace: kube-system}]",
+        "!!merge <<: {namespace: kube-system}",
+        '"<<": {namespace: kube-system}',
+      ]) {
+        const merged = pinned(IMAGE).replace("metadata:\n  name: knowledgebase\n", `metadata:\n  ${merge}\n  name: knowledgebase\n`)
+        const r = check(merged)
+        assert.notEqual(r.status, 0, merge)
+        assert.match(r.out, /names a namespace|"<<"/, merge)
+      }
+      const anchored = pinned(IMAGE).replace("metadata:\n  name: knowledgebase\n", "x: &m {namespace: kube-system}\nmetadata:\n  <<: *m\n  name: knowledgebase\n")
+      assert.notEqual(check(anchored).status, 0, "a merged alias")
     })
 
     test("a name in the release can't start a workflow command of its own", () => {

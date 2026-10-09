@@ -166,6 +166,17 @@ describe("set-github-variables.sh", () => {
       assert.deepEqual(varSets(r), [])
     })
   }
+
+  // Each would change what runs next: the gh it finds, a library loaded
+  // into every process, the host gh talks to.
+  for (const line of ["PATH=/nonexistent", "LD_PRELOAD=/nonexistent/x.so", "GH_HOST=evil.example", "BASH_ENV=/tmp/x"]) {
+    test(`refuses ${line}: the file sets APP_DOMAIN only`, () => {
+      const r = runScript(script, {}, [], `APP_DOMAIN=kb.example.org\n${line}\n`)
+      assert.notEqual(r.status, 0, r.out)
+      assert.match(r.out, new RegExp(`${line.split("=")[0]} is not a setting`))
+      assert.deepEqual(r.gh, [], "gh ran")
+    })
+  }
 })
 
 describe(".env stays out of the image", () => {

@@ -5,13 +5,15 @@
 //
 //   IMAGE=<repo@sha256:...> node scripts/check-release.mjs <kustomization.json> <built.jsonl>
 //
-// Fails closed: anything not on an allow-list is an error. The cluster's
+// Fails closed: anything not on an allow-list is an error. Only a whole
+// ${APP_DOMAIN} Ingress host is left for the cluster to substitute. The cluster's
 // admission policies are the real boundary; this stops a bad release before
 // it is published.
 import fs from "node:fs"
 import { pathToFileURL } from "node:url"
 
-const KINDS = ["Service", "Deployment", "Ingress"]
+// apiVersion and kind together: a custom resource may reuse a core kind's name.
+const KINDS = ["v1/Service", "apps/v1/Deployment", "networking.k8s.io/v1/Ingress"]
 const KUSTOMIZATION_KEYS = ["apiVersion", "kind", "resources", "images"]
 const RESOURCE = /^[a-z0-9][a-z0-9-]*\.yaml$/
 const IMAGE_REF = /^ghcr\.io\/[a-z0-9-]+\/knowledgebase@sha256:[0-9a-f]{64}$/
@@ -60,6 +62,34 @@ function imagesIn(value, found = []) {
   return found
 }
 
+// The cluster substitutes ${VAR} after this check, in keys as well as
+// values, and its YAML decoder resolves merge keys. So no key may hold a "$"
+// or be "<<", and the only ${...} allowed is ${APP_DOMAIN}, as a whole
+// Ingress host.
+function substitutionProblems(doc) {
+  const problems = []
+  const hosts = new Set()
+  if (doc.kind === "Ingress") {
+    const list = (v) => (Array.isArray(v) ? v : [])
+    list(doc.spec?.rules).forEach((_, i) => hosts.add(`.spec.rules[${i}].host`))
+    list(doc.spec?.tls).forEach((t, i) => list(t?.hosts).forEach((_, j) => hosts.add(`.spec.tls[${i}].hosts[${j}]`)))
+  }
+  const walk = (value, at) => {
+    if (Array.isArray(value)) {
+      value.forEach((v, i) => walk(v, `${at}[${i}]`))
+    } else if (isObject(value)) {
+      for (const [k, v] of Object.entries(value)) {
+        if (k.includes("$") || k === "<<") problems.push(`key ${JSON.stringify(k)} under ${JSON.stringify(at || ".")}`)
+        walk(v, `${at}.${k}`)
+      }
+    } else if (typeof value === "string" && value.includes("${")) {
+      if (!(value === "${APP_DOMAIN}" && hosts.has(at))) problems.push(`substitution ${JSON.stringify(value)} at ${JSON.stringify(at)}`)
+    }
+  }
+  walk(doc, "")
+  return problems
+}
+
 export function builtProblems(docs, image) {
   const problems = []
   let images = 0
@@ -71,7 +101,9 @@ export function builtProblems(docs, image) {
     // Quoted: a name is the release's text, and a newline in it would start
     // a workflow command of its own.
     const what = JSON.stringify(`${doc.kind}/${doc.metadata?.name}`)
-    if (!KINDS.includes(doc.kind)) problems.push(`${what}: kind ${JSON.stringify(doc.kind)} is not allowed`)
+    const type = `${doc.apiVersion}/${doc.kind}`
+    if (!KINDS.includes(type)) problems.push(`${what}: ${JSON.stringify(type)} is not allowed`)
+    for (const p of substitutionProblems(doc)) problems.push(`${what}: ${p}`)
     if (doc.metadata?.namespace !== undefined) problems.push(`${what}: names a namespace`)
     for (const i of imagesIn(doc)) {
       images++

@@ -104,7 +104,12 @@ jobs:
           owner_lower="${GITHUB_REPOSITORY_OWNER,,}"
           repo="ghcr.io/${owner_lower}/knowledgebase"
           # The tag becomes a docker tag in a comma-separated list: admit only
-          # a release version, so a tag name can't add tags of its own.
+          # a release version, so a tag name can't add tags of its own. An
+          # empty pattern would match any tag.
+          if [[ -z "${VERSION_TAG_RE:-}" ]]; then
+            echo "::error::VERSION_TAG_RE is not set."
+            exit 1
+          fi
           if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" == *$'\n'* || ${#GITHUB_REF_NAME} -gt 128 || ! "$GITHUB_REF_NAME" =~ $VERSION_TAG_RE ]]; then
             echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
             exit 1
@@ -234,6 +239,11 @@ jobs:
             echo "::error::Unexpected artifact repository '${MANIFESTS}'."
             fail=1
           fi
+          # An empty pattern would match any tag.
+          if [[ -z "${VERSION_TAG_RE:-}" ]]; then
+            echo "::error::VERSION_TAG_RE is not set."
+            exit 1
+          fi
           if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" == *$'\n'* || ${#GITHUB_REF_NAME} -gt 128 || ! "$GITHUB_REF_NAME" =~ $VERSION_TAG_RE ]]; then
             echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
             fail=1
@@ -245,14 +255,17 @@ jobs:
       # Fails closed on what the cluster would apply. yq turns the baked
       # kustomization.yaml and the built objects into JSON, so quoting and
       # flow style can't hide anything, and scripts/check-release.mjs
-      # allow-lists them: kustomization keys and local resources only, kinds
-      # Service, Deployment and Ingress, and every image the digest this run
-      # pushed. The cluster never takes Secrets from a release.
+      # allow-lists them: kustomization keys and local resources only,
+      # apiVersion/kind Service, Deployment and Ingress, and every image the
+      # digest this run pushed. The cluster never takes Secrets from a
+      # release. explode() with merges to the YAML spec resolves aliases and
+      # << merge keys as the cluster's decoder does; without the flag, yq
+      # drops an inline merge (and what it adds) from its JSON.
       - name: Check the release
         run: |
           kustomize build k8s-do > "${RUNNER_TEMP}/built.yaml"
-          yq -o=json -I=0 '.' k8s-do/kustomization.yaml > "${RUNNER_TEMP}/kustomization.jsonl"
-          yq -o=json -I=0 '.' "${RUNNER_TEMP}/built.yaml" > "${RUNNER_TEMP}/built.jsonl"
+          yq --yaml-fix-merge-anchor-to-spec -o=json -I=0 'explode(.)' k8s-do/kustomization.yaml > "${RUNNER_TEMP}/kustomization.jsonl"
+          yq --yaml-fix-merge-anchor-to-spec -o=json -I=0 'explode(.)' "${RUNNER_TEMP}/built.yaml" > "${RUNNER_TEMP}/built.jsonl"
           node scripts/check-release.mjs "${RUNNER_TEMP}/kustomization.jsonl" "${RUNNER_TEMP}/built.jsonl"
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

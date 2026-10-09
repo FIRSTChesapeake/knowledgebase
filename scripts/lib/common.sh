@@ -15,10 +15,12 @@ die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 # default is the git-ignored .env at the repo root.
 #
 # The file is parsed, never run: each line is blank, a # comment, or
-# KEY=value with KEY matching ^[A-Z][A-Z0-9_]*$. The value is taken
-# literally (no expansion or substitution), minus one pair of matching
-# surrounding quotes. Any other line is an error. As with sourcing, a value
-# in the file overrides one already in the environment.
+# KEY=value with KEY one of ENV_KEYS, so the file can't set PATH,
+# LD_PRELOAD or gh's own variables. The value is taken literally (no
+# expansion or substitution), minus one pair of matching surrounding quotes.
+# Any other line is an error. A value in the file overrides one already in
+# the environment.
+ENV_KEYS="APP_DOMAIN"
 load_env() {
   local env_file="${KB_ENV_FILE:-$REPO_ROOT/.env}"
   [[ -f "$env_file" ]] || return 0
@@ -32,6 +34,7 @@ load_env() {
     fi
     key="${BASH_REMATCH[1]}"
     value="${BASH_REMATCH[2]}"
+    [[ " $ENV_KEYS " == *" $key "* ]] || die "$env_file:$n: $key is not a setting (allowed: $ENV_KEYS)"
     if [[ ${#value} -ge 2 && ( ( "${value:0:1}" == '"' && "${value: -1}" == '"' ) \
           || ( "${value:0:1}" == "'" && "${value: -1}" == "'" ) ) ]]; then
       value="${value:1:${#value}-2}"
