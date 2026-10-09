@@ -10,8 +10,8 @@ name: Deploy knowledgebase
 # net; the security control is the repo settings in k8s-do/README.md
 # (image-publish environment limited to v* tags, and a tag ruleset on v*).
 #
-# The site is served only from the Kubernetes cluster; GitHub Pages is no
-# longer published. One run releases it (image, manifests). This workflow holds no cluster
+# The site is served only from the Kubernetes cluster; GitHub Pages is turned
+# off. One run releases it (image, manifests). This workflow holds no cluster
 # credential and no secret but GITHUB_TOKEN: it pushes the image and a
 # release artifact of k8s-do/ to GHCR, and the cluster pulls the artifact
 # itself. Every job needs guard, directly or through another job.

@@ -4,7 +4,7 @@ The knowledgebase runs on the CHS cluster as a static nginx image (see the
 repo's `Dockerfile`): Quartz builds the site inside the image build, and
 nginx serves it. The `Deploy knowledgebase` workflow
 (`.github/workflows/deploy.yml`) releases each version tag to the cluster,
-the site's only home: GitHub Pages is no longer published.
+the site's only home: GitHub Pages is turned off.
 
 Nothing here deploys anything. A release pushes two packages to GHCR, the
 image and a release artifact of this directory, and the cluster pulls the
@@ -169,7 +169,6 @@ range, the deployer Role and the admission policies in the config repo.
    - a deep link to a page, and a folder page (e.g. `/FRC/`);
    - a missing page shows the 404 page with status 404;
    - `/sitemap.xml` and `/index.xml` list URLs on the new host.
-5. Update links to the site to the new host. GitHub Pages is no longer
-   updated: its last copy stays up, stale, until Pages is turned off in the
-   repo settings (Settings → Pages). The `github-pages` environment is no
-   longer used.
+5. Update links to the site to the new host. GitHub Pages is turned off and
+   the `github-pages` environment deleted; the old
+   `firstchesapeake.github.io/knowledgebase` address no longer serves the site.
