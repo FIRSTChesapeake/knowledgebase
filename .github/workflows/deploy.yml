@@ -1,24 +1,23 @@
 name: Deploy knowledgebase
 
 # Publishing is tag-driven: merging to main changes nothing on the live site
-# until a version tag (vX.Y.Z) is pushed. workflow_dispatch re-publishes a
-# version: dispatch it from the v* tag ("Use workflow from"), never from a
-# branch; the production and image-publish environments refuse any other
-# ref. Either way, only a commit already on main may deploy.
+# until a version tag (vX.Y.Z) is pushed, and only a commit already on main
+# may be released. There is no manual dispatch: a run without a tag has no
+# version to publish.
 #
-# The guard job below runs from the workflow file at the deployed ref, so a
+# The guard job below runs from the workflow file at the tagged commit, so a
 # tag on an unmerged commit could carry an edited copy of it. It is a safety
 # net; the security control is the repo settings in k8s-do/README.md
-# (production and image-publish environments limited to v* tags, required
-# reviewers on production, and a tag ruleset on v*).
+# (image-publish environment limited to v* tags, and a tag ruleset on v*).
 #
-# One run publishes to both GitHub Pages (build, deploy) and the Kubernetes
-# cluster (image, deploy-cluster). Every job needs guard, directly or
-# through another job.
+# One run publishes to GitHub Pages (build, deploy) and releases to the
+# Kubernetes cluster (image, manifests). This workflow holds no cluster
+# credential and no secret but GITHUB_TOKEN: it pushes the image and a
+# release artifact of k8s-do/ to GHCR, and the cluster pulls the artifact
+# itself. Every job needs guard, directly or through another job.
 on:
   push:
     tags: ['v[0-9]*.[0-9]*.[0-9]*']
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -32,12 +31,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      # Only commits already merged to main may deploy. A dispatch from main
-      # itself passes this check and republishes Pages from main, but the
-      # image-publish and production environments refuse any ref but a v*
-      # tag, so the cluster is untouched. Every job needs this one, so a
-      # failure here stops the publish. Fails closed: a missing origin/main
-      # is a failure, not a pass.
+      # Only commits already merged to main may be released. Every job
+      # needs this one, so a failure here stops the publish. Fails closed:
+      # a missing origin/main is a failure, not a pass.
       - name: Require the deployed commit to be on main
         env:
           DEPLOY_SHA: ${{ github.sha }}
@@ -100,12 +96,12 @@ jobs:
 
   # Builds the site into an nginx image (see Dockerfile) and pushes it to
   # GHCR tagged :sha-<commit> and with the version tag. Tags can be moved by
-  # a later push, so the job's output is the pushed digest, and the cluster
-  # deploys by digest. The image-publish environment (v* tags only, no
-  # reviewers) stops this unmodified workflow from pushing from any other
+  # a later push, so the job's output is the pushed digest, and the release
+  # pins the image by digest. The image-publish environment (v* tags only,
+  # no reviewers) stops this unmodified workflow from pushing from any other
   # ref. Like the guard it is not a control against repo writers (an
-  # edited workflow can drop it); deploy-cluster only uses the digest this
-  # run pushed.
+  # edited workflow can drop it); manifests only uses the digest this run
+  # pushed.
   image:
     needs: guard
     runs-on: ubuntu-22.04
@@ -115,6 +111,7 @@ jobs:
       packages: write
     outputs:
       image: ${{ steps.digest.outputs.image }}
+      manifests: ${{ steps.tags.outputs.manifests }}
     steps:
       # Full history: Quartz reads page dates from git inside the build.
       # No persisted token: .git is copied into the image's builder stage.
@@ -149,6 +146,7 @@ jobs:
             tags="${tags},${repo}:${GITHUB_REF_NAME}"
           fi
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
+          echo "manifests=ghcr.io/${owner_lower}/manifests/knowledgebase" >> "$GITHUB_OUTPUT"
           echo "tags=${tags}" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -184,139 +182,117 @@ jobs:
           fi
           echo "image=${image}" >> "$GITHUB_OUTPUT"
 
-  # Renders k8s-do/*.yaml and applies it with the namespace-scoped
-  # kb-deployer credential. The bootstrap/ manifests are applied by hand,
-  # never here. A failed rollout is rolled back.
-  deploy-cluster:
-    needs: [image]
-    runs-on: ubuntu-22.04
+  # Publishes k8s-do/ as the release artifact the cluster pulls:
+  # oci://ghcr.io/<owner>/manifests/knowledgebase:<tag>. The image is pinned
+  # by the digest the image job pushed, written into this job's copy of
+  # kustomization.yaml only, never committed. The cluster deploys the
+  # highest version in its range within minutes, so a pushed tag is a
+  # release: an existing one is never overwritten.
+  manifests:
+    needs: [guard, image]
+    runs-on: ubuntu-24.04
+    environment: image-publish
     permissions:
       contents: read
-    environment:
-      name: production
-      url: https://${{ vars.APP_DOMAIN }}
-    concurrency:
-      group: knowledgebase-cluster
-      cancel-in-progress: false
+      packages: write
     env:
-      NS: ${{ vars.K8S_NAMESPACE }}
-      APP_DOMAIN: ${{ vars.APP_DOMAIN }}
       IMAGE: ${{ needs.image.outputs.image }}
+      MANIFESTS: ${{ needs.image.outputs.manifests }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Whole-value checks (a newline fails them): each value is rendered
-      # into the manifests with sed.
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        with:
+          version: 2.9.6
+      # A pinned release, checked against its published sha256.
+      - name: Install kustomize
+        env:
+          KUSTOMIZE_VERSION: v5.8.3
+          KUSTOMIZE_SHA256: cb9e31198d3f63b44848bd0afc4c8efc56e6cfef9c93a4a39a211940e6decd61
+        run: |
+          dir="${RUNNER_TEMP}/kustomize"
+          mkdir -p "$dir"
+          tarball="${dir}/kustomize.tar.gz"
+          curl -fsSL -o "$tarball" \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          echo "${KUSTOMIZE_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" -C "$dir" kustomize
+          echo "$dir" >> "$GITHUB_PATH"
+      # Whole-value checks (a newline fails them): each value reaches a
+      # command line or the artifact's address.
       - name: Validate inputs
         run: |
           fail=0
-          label='[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?'
-          if [[ "$NS" == *$'\n'* || ! "$NS" =~ ^${label}$ ]]; then
-            echo "::error::Repo variable K8S_NAMESPACE must be set to a namespace name."
-            fail=1
-          fi
-          if [[ "$APP_DOMAIN" == *$'\n'* || ${#APP_DOMAIN} -gt 253 || ! "$APP_DOMAIN" =~ ^${label}(\.${label})+$ ]]; then
-            echo "::error::Repo variable APP_DOMAIN must be set to a lowercase hostname."
-            fail=1
-          fi
           if [[ "$IMAGE" == *$'\n'* || ! "$IMAGE" =~ ^ghcr\.io/[a-z0-9-]+/knowledgebase@sha256:[0-9a-f]{64}$ ]]; then
             echo "::error::Unexpected image reference '${IMAGE}'."
             fail=1
           fi
+          if [[ "$MANIFESTS" == *$'\n'* || ! "$MANIFESTS" =~ ^ghcr\.io/[a-z0-9-]+/manifests/knowledgebase$ ]]; then
+            echo "::error::Unexpected artifact repository '${MANIFESTS}'."
+            fail=1
+          fi
+          if [[ "$GITHUB_REF_TYPE" != tag || "$GITHUB_REF_NAME" == *$'\n'* || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.-]*$ ]]; then
+            echo "::error::Unexpected version tag '${GITHUB_REF_NAME}'."
+            fail=1
+          fi
           exit "$fail"
-      # KUBECONFIG_KB_EXPIRES is set by scripts/rotate-deploy-token.sh from
-      # the token itself. An expired token would fail at the first kubectl
-      # call; this says why, and warns two weeks ahead.
-      - name: Check deploy token expiry
-        env:
-          KUBECONFIG_KB_EXPIRES: ${{ vars.KUBECONFIG_KB_EXPIRES }}
+      - name: Bake the image digest
+        working-directory: k8s-do
+        run: kustomize edit set image "knowledgebase=${IMAGE}"
+      # Fails closed on what the cluster would apply: every image is the one
+      # just pushed, by digest, and nothing in it is a Secret (the cluster
+      # never takes Secrets from a release).
+      - name: Check the release
         run: |
-          if [ -z "$KUBECONFIG_KB_EXPIRES" ]; then
-            echo "::warning::Repo variable KUBECONFIG_KB_EXPIRES is not set; the deploy token's expiry is unknown. Run scripts/rotate-deploy-token.sh."
-            exit 0
-          fi
-          if [[ "$KUBECONFIG_KB_EXPIRES" == *$'\n'* \
-             || ! "$KUBECONFIG_KB_EXPIRES" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] \
-             || ! expires="$(date -u -d "$KUBECONFIG_KB_EXPIRES" +%s 2>/dev/null)"; then
-            echo "::error::Repo variable KUBECONFIG_KB_EXPIRES must be an ISO 8601 UTC time (YYYY-MM-DDTHH:MM:SSZ)."
+          if grep -Eq '^[[:space:]]*(secretGenerator|configMapGenerator|generators):' k8s-do/kustomization.yaml; then
+            echo "::error::k8s-do/kustomization.yaml has a generator; a release holds no Secrets or generated objects."
             exit 1
           fi
-          left=$(( expires - $(date -u +%s) ))
-          if (( left <= 0 )); then
-            echo "::error::The deploy token (KUBECONFIG_KB) expired at ${KUBECONFIG_KB_EXPIRES}; nothing was deployed. A cluster admin renews it with scripts/rotate-deploy-token.sh."
+          built="$(kustomize build k8s-do)"
+          if grep -Eq '^kind:[[:space:]]*Secret[[:space:]]*$' <<<"$built"; then
+            echo "::error::The built release holds a Secret."
             exit 1
           fi
-          if (( left < 14 * 86400 )); then
-            echo "::warning::The deploy token (KUBECONFIG_KB) expires at ${KUBECONFIG_KB_EXPIRES}, in $(( left / 86400 )) days. Renew it with scripts/rotate-deploy-token.sh."
-          fi
-      - name: Write kubeconfig
-        env:
-          KUBECONFIG_B64: ${{ secrets.KUBECONFIG_KB }}
-        run: |
-          if [ -z "$KUBECONFIG_B64" ]; then
-            echo "::error::Environment secret KUBECONFIG_KB is not set."
+          images="$(sed -nE 's/^[[:space:]-]*image:[[:space:]]*"?([^"[:space:]]*)"?[[:space:]]*$/\1/p' <<<"$built")"
+          if [ -z "$images" ]; then
+            echo "::error::The built release holds no image."
             exit 1
           fi
-          mkdir -p ~/.kube
-          printf '%s' "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-      - name: Render manifests
+          while IFS= read -r image; do
+            if [[ "$image" != "$IMAGE" || ! "$image" =~ ^ghcr\.io/[a-z0-9-]+/knowledgebase@sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Image '${image}' in the built release is not the digest this run pushed."
+              exit 1
+            fi
+          done <<<"$images"
+          echo "The release pins ${IMAGE}."
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # flux push artifact silently replaces an existing tag. Only the
+      # registry's "not found" means the tag is free; any other failure
+      # stops the release. A re-run after a failed push still works.
+      - name: Refuse to overwrite a release
         run: |
-          rm -rf k8s-do-rendered
-          mkdir k8s-do-rendered
-          cp k8s-do/*.yaml k8s-do-rendered/
-          sed -i \
-            -e "s|__PROJECT_NAMESPACE__|$NS|g" \
-            -e "s|__APP_DOMAIN__|$APP_DOMAIN|g" \
-            -e "s|__IMAGE__|$IMAGE|g" \
-            k8s-do-rendered/*.yaml
-          if grep -rl '__[A-Z_]*__' k8s-do-rendered; then
-            echo "::error::Unrendered placeholders remain in the files above."
+          ref="oci://${MANIFESTS}:${GITHUB_REF_NAME}"
+          mkdir -p "${RUNNER_TEMP}/existing"
+          if out="$(flux pull artifact "$ref" --output "${RUNNER_TEMP}/existing" 2>&1)"; then
+            echo "::error::${ref} already exists. Release tags are immutable; cut a new tag."
             exit 1
           fi
-      - name: Record current revision
-        run: |
-          # Only a missing Deployment (NotFound, which --ignore-not-found
-          # turns into empty output) is a first deploy. Any other error
-          # (expired token, unreachable API server) stops the run here,
-          # before anything is applied.
-          if ! before="$(kubectl -n "$NS" get deployment knowledgebase --ignore-not-found \
-            -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')"; then
-            echo "::error::Could not read deployment/knowledgebase; nothing was applied."
+          if ! grep -Eq 'MANIFEST_UNKNOWN|NAME_UNKNOWN' <<<"$out"; then
+            echo "::error::Could not tell whether ${ref} exists; nothing was pushed."
+            printf '%s\n' "$out"
             exit 1
           fi
-          # Empty on the first deploy; otherwise a revision number, and
-          # nothing else may reach GITHUB_ENV.
-          if [[ -n "$before" && ! "$before" =~ ^[0-9]+$ ]]; then
-            echo "::error::Unexpected revision annotation on deployment/knowledgebase."
-            exit 1
-          fi
-          echo "BEFORE=${before}" >> "$GITHUB_ENV"
-      - name: Apply manifests
-        id: apply
+          echo "${ref} is free."
+      - name: Push the release artifact
         run: |
-          kubectl -n "$NS" apply -f k8s-do-rendered/service.yaml
-          kubectl -n "$NS" apply -f k8s-do-rendered/deployment.yaml
-          kubectl -n "$NS" apply -f k8s-do-rendered/ingress.yaml
-      - name: Wait for rollout
-        id: rollout
-        run: kubectl -n "$NS" rollout status deployment/knowledgebase --timeout=300s
-      # Only once the apply has run: an earlier failure changed nothing on
-      # the cluster, and an undo then would roll back the healthy release.
-      # Nothing but the recorded revision is undone to: with no BEFORE (the
-      # first deploy) there is nothing to roll back to. This run log is
-      # public: no pod logs (the access log holds visitor IPs) and no pod or
-      # node IPs.
-      - name: Diagnose and roll back
-        if: failure() && (steps.apply.outcome == 'failure' || steps.rollout.outcome == 'failure')
-        run: |
-          kubectl -n "$NS" get pods -l app.kubernetes.io/name=knowledgebase || true
-          kubectl -n "$NS" describe deployment knowledgebase || true
-          kubectl -n "$NS" get events --sort-by=.lastTimestamp | tail -n 30 || true
-          if [ -n "${BEFORE:-}" ]; then
-            kubectl -n "$NS" rollout undo deployment/knowledgebase --to-revision="$BEFORE" || true
-          else
-            echo "::warning::First deploy: no earlier revision to roll back to."
-          fi
-          exit 1
+          out="$(flux push artifact "oci://${MANIFESTS}:${GITHUB_REF_NAME}" \
+            --path=./k8s-do \
+            --source="https://github.com/${GITHUB_REPOSITORY}" \
+            --revision="${GITHUB_REF_NAME}@sha1:${GITHUB_SHA}" \
+            --output=json)"
+          echo "Pushed oci://${MANIFESTS}:${GITHUB_REF_NAME} ($(jq -r .digest <<<"$out"))."

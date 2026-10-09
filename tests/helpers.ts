@@ -54,18 +54,16 @@ export function walkFiles(relDir: string): string[] {
   return out.sort()
 }
 
-// App manifests applied by CI: k8s-do/*.yaml, never k8s-do/bootstrap/.
-export function appManifests(): { file: string; doc: any }[] {
-  return listFiles("k8s-do", ".yaml").flatMap((file) =>
-    loadYamlDocs(file).map((doc) => ({ file, doc })),
-  )
+export function kustomization(): any {
+  return loadYaml("k8s-do/kustomization.yaml")
 }
 
-// Hand-applied manifests in k8s-do/bootstrap/.
-export function bootstrapManifests(): { file: string; doc: any }[] {
-  return listFiles("k8s-do/bootstrap", ".yaml").flatMap((file) =>
-    loadYamlDocs(file).map((doc) => ({ file, doc })),
-  )
+// The release's objects: every file k8s-do/kustomization.yaml lists.
+export function appManifests(): { file: string; doc: any }[] {
+  return (kustomization().resources as string[]).flatMap((name) => {
+    const file = path.posix.join("k8s-do", name)
+    return loadYamlDocs(file).map((doc) => ({ file, doc }))
+  })
 }
 
 // Runs a script the way a GitHub Actions `run:` step does (bash -e), with
@@ -83,7 +81,7 @@ export function runBash(
 
 // APP_DOMAIN values every validation must refuse: a second line (which
 // build-args would read as an argument of its own), labels and names over
-// the DNS limits, and characters that would break the sed render.
+// the DNS limits, and characters no hostname has.
 export const BAD_DOMAINS: string[] = [
   "",
   "kb",
@@ -115,10 +113,4 @@ export function scratchDir(): string {
 
 export function deployWorkflow(): any {
   return loadYaml(".github/workflows/deploy.yml")
-}
-
-// The placeholders the deploy workflow's render step substitutes.
-export function renderedPlaceholders(): string[] {
-  const text = readText(".github/workflows/deploy.yml")
-  return [...text.matchAll(/-e "s\|(__[A-Z_]+__)\|/g)].map((m) => m[1]).sort()
 }

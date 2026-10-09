@@ -1,14 +1,14 @@
 # Static knowledgebase site: nginx serving the Quartz build baked into the
-# image. __IMAGE__ is rendered by the deploy workflow to the image pinned
-# by the digest it just pushed, so applying this file is the deploy.
+# image. The image is the bare name knowledgebase: the release workflow
+# pins it to the digest it just pushed (kustomize images:, in the release
+# artifact only), and the cluster refuses an image not pinned by digest.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: knowledgebase
-  namespace: __PROJECT_NAMESPACE__
   labels:
     app.kubernetes.io/name: knowledgebase
-    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+    app.kubernetes.io/part-of: knowledgebase
 spec:
   replicas: 2
   revisionHistoryLimit: 5
@@ -24,7 +24,7 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: knowledgebase
-        app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+        app.kubernetes.io/part-of: knowledgebase
     spec:
       # The site talks to no Kubernetes API.
       automountServiceAccountToken: false
@@ -39,7 +39,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: knowledgebase
-          image: __IMAGE__
+          image: knowledgebase
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

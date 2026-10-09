@@ -2,10 +2,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: knowledgebase
-  namespace: __PROJECT_NAMESPACE__
   labels:
     app.kubernetes.io/name: knowledgebase
-    app.kubernetes.io/part-of: __PROJECT_NAMESPACE__
+    app.kubernetes.io/part-of: knowledgebase
 spec:
   type: ClusterIP
   selector:
