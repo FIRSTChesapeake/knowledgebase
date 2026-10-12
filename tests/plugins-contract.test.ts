@@ -283,7 +283,10 @@ describe("the local plugins", () => {
 // folder, so a step's working directory does not matter.
 function installProblems(command: string): string[] {
   const text = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim()
-  const verb = /(^|[\s;&|()`])(npm|pnpm|yarn)(\s+--?[\w-]+(=\S+)?)*\s+(install|i|add|update|up|upgrade)(?=$|[\s;&|()`])/
+  // Flags are `\s+-\S*`: a flag always starts with `-` right after
+  // whitespace, and \s/\S never overlap, so there is exactly one way to
+  // split any string into (flag)* + verb and the engine can't backtrack.
+  const verb = /(^|[\s;&|()`])(npm|pnpm|yarn)(\s+-\S*)*\s+(install|i|add|update|up|upgrade)(?=$|[\s;&|()`])/
   const bareYarn = /(^|[\s;&|()`])yarn(?=$|\s*[;&|)`])/
   return verb.test(text) || bareYarn.test(text) ? [text] : []
 }
@@ -366,18 +369,41 @@ describe("every build installs from the lockfiles before the plugin install", ()
     "yarn",
     "yarn && npm test",
     "yarn add x",
+    "yarn upgrade",
     "(npm install)",
+    "npm --prefix=x install",
+    "npm -g i",
+    "echo a;npm install",
+    "echo a|npm install",
+    "echo `npm install`",
   ]) {
     test(`the install check refuses ${JSON.stringify(bad)}`, () => {
       assert.notDeepEqual(installProblems(bad), [])
     })
   }
 
-  for (const ok of [NPM_CI, INSTALL, "npm run build", "npm test", "npm ci", "npx tsx --test x", "echo yarnball"]) {
+  for (const ok of [
+    NPM_CI,
+    INSTALL,
+    "npm run build",
+    "npm test",
+    "npm ci",
+    "npx tsx --test x",
+    "echo yarnball",
+    "npm run install-deps",
+    "npm installer",
+  ]) {
     test(`the install check allows ${JSON.stringify(ok)}`, () => {
       assert.deepEqual(installProblems(ok), [])
     })
   }
+
+  test("the install check's verb regex is linear, not exponential, in the flags it skips", () => {
+    const hostile = "npm -" + "-- -".repeat(5000)
+    const start = performance.now()
+    installProblems(hostile)
+    assert.ok(performance.now() - start < 500, "installProblems took too long on a hostile string")
+  })
 
   test("the Dockerfile reader refuses a heredoc RUN and unwraps the exec form", () => {
     assert.notDeepEqual(dockerRuns("RUN <<EOF\nnpm install\nEOF\n").problems, [])
