@@ -18,7 +18,10 @@ Documentation for the platform that turns event livestreams into published match
 ****
 
 
-> [!summary] Knowledgebase version 26.10.0 (updated 9/26/26)
+> [!summary] Knowledgebase version 26.11.0 (updated 10/1/26)
+> Changes from v26.10.0:
+> - Updated the Event Streaming Management manual for the latest platform release: the YouTube preview setting and End preview, sending AV1, HEVC or VP9 video from OBS to YouTube and the new "Push failing — retrying" status, the setup-day test video for the day before an event, which events' match lists client members can see, plain-language reasons on upload errors, and the slower check interval for signs the platform doesn't control.
+> 
 > Changes from v26.9.0:
 > - Updated the tool that builds this site to Quartz 5. Page addresses are now all lowercase; old addresses, bookmarks and QR codes redirect to the new ones. The footer now shows the Quartz version.
 > - Kept the protection against unsafe page headers in the new version.

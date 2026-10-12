@@ -1,0 +1,79 @@
+name: Tests
+
+# Runs on every pull request to main, and on main itself, the same suites as
+# the local light tier: the frontmatter plugin's tests, Quartz's own tests, a
+# full Quartz build (the check that catches a broken page or wikilink), the
+# contract tests under tests/, and actionlint with ShellCheck. Make the "Light
+# tests" and "actionlint" checks required on main.
+#
+# Read-only: contents: read, no secrets, and pull_request (never
+# pull_request_target), so code from a fork never runs with a token that can
+# write.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  light:
+    name: Light tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # The image the Dockerfile builds with: the full (non-slim) node image,
+    # since the quartz CLI shells out to git.
+    container:
+      image: node:22-bookworm@sha256:0e5f906573693feaa1e21057ebdcfdb5bd5021f050b2dc7c9deceb629c7da2a8
+    steps:
+      # Full history: Quartz reads page dates from git.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # The container's user doesn't own the runner's checkout, and git
+      # refuses a repository it doesn't own.
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      # With its dev dependencies, before the plugin install prunes them.
+      - name: Frontmatter plugin tests
+        working-directory: plugins/note-properties
+        run: |
+          rm -rf dist
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
+      - name: Install Quartz plugins
+        run: |
+          rm -rf .quartz quartz.lock.json
+          npx quartz plugin install --from-config
+      # Quartz's own tests only: the plugin's vitest files would break a bare
+      # tsx --test.
+      - name: Quartz tests
+        run: npx tsx --test "quartz/**/*.test.ts" "quartz/**/*.test.js"
+      - name: Build the site
+        run: npx quartz build
+      - name: Contract tests
+        run: npx tsx --test "tests/**/*.test.ts"
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Lints every workflow, with ShellCheck on the run: scripts.
+      - name: actionlint
+        uses: docker://rhysd/actionlint@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9 # 1.7.7
+        with:
+          args: -color

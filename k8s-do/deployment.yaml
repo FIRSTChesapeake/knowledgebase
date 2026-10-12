@@ -1,0 +1,82 @@
+# Static knowledgebase site: nginx serving the Quartz build baked into the
+# image. The image is the bare name knowledgebase: the release workflow
+# pins it to the digest it just pushed (kustomize images:, in the release
+# artifact only), and the cluster refuses an image not pinned by digest.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledgebase
+  labels:
+    app.kubernetes.io/name: knowledgebase
+    app.kubernetes.io/part-of: knowledgebase
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: knowledgebase
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: knowledgebase
+        app.kubernetes.io/part-of: knowledgebase
+    spec:
+      # The site talks to no Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # Numeric, and equal to the Dockerfile's USER: the kubelet can only
+        # verify runAsNonRoot against a numeric uid.
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: knowledgebase
+          image: knowledgebase
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # The image entrypoint tries to edit its conf on a read-only
+            # root, logs that it can't and carries on; keep that quiet.
+            - name: NGINX_ENTRYPOINT_QUIET_LOGS
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          volumeMounts:
+            # nginx-unprivileged keeps its pid and temp files under /tmp.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

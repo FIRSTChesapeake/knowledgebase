@@ -90,8 +90,12 @@
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "unified": "^11.0.5",
-    "vitest": "^2.1.9",
+    "vitest": "^4.1.11",
     "@changesets/cli": "^2.29.2"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "js-yaml@3": "^3.15.2"
   },
   "engines": {
     "node": ">=22",
