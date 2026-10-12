@@ -1,10 +1,10 @@
 name: Tests
 
 # Runs on every pull request to main, and on main itself, the same suites as
-# the local light tier: the frontmatter plugin's tests, Quartz's own tests, a
-# full Quartz build (the check that catches a broken page or wikilink), the
-# contract tests under tests/, and actionlint with ShellCheck. Make the "Light
-# tests" and "actionlint" checks required on main.
+# the local light tier: the frontmatter plugin's tests, the root typecheck,
+# Quartz's own tests, a full Quartz build (the check that catches a broken
+# page or wikilink), the contract tests under tests/, and actionlint with
+# ShellCheck. Make the "Light tests" and "actionlint" checks required on main.
 #
 # Read-only: contents: read, no secrets, and pull_request (never
 # pull_request_target), so code from a fork never runs with a token that can
@@ -55,6 +55,9 @@ jobs:
         run: |
           rm -rf .quartz quartz.lock.json
           npx quartz plugin install --from-config
+      # After the plugin install, so the installed plugins resolve.
+      - name: Typecheck
+        run: npx tsc --noEmit
       # Quartz's own tests only: the plugin's vitest files would break a bare
       # tsx --test.
       - name: Quartz tests
