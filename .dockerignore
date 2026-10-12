@@ -5,6 +5,7 @@ node_modules
 public
 .quartz
 .quartz-cache
+quartz/.quartz-cache
 quartz.lock.json
 plugins/note-properties/dist
 .scratch
