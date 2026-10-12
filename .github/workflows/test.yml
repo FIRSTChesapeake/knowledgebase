@@ -51,6 +51,11 @@ jobs:
           npm ci --no-audit --no-fund
           npm run typecheck
           npm test
+      # Every remote plugin is an npm dependency, pinned by package-lock.json
+      # and installed by npm ci above; this step only links and builds the
+      # local frontmatter plugin. quartz.lock.json is deleted because it
+      # records that plugin's absolute path, not a pin (see
+      # tests/plugins-contract.test.ts).
       - name: Install Quartz plugins
         run: |
           rm -rf .quartz quartz.lock.json

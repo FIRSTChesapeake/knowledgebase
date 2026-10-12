@@ -851,9 +851,11 @@ describe("the Tests workflow runs the light suites on every pull request", () =>
     }
   })
 
-  test("runs in the Dockerfile's pinned builder image", () => {
+  test("the workflow and the light tier run in the Dockerfile's pinned builder image", () => {
     const builder = /^FROM (\S+) AS builder$/m.exec(readText("Dockerfile"))![1]
+    assert.match(builder, /@sha256:[0-9a-f]{64}$/)
     assert.equal(tw.jobs.light.container.image, builder)
+    assert.equal(JSON.parse(readText(".test-tiers.json")).tiers.light.image, builder)
     assert.equal(tw.jobs.light.name, "Light tests")
   })
 
@@ -872,6 +874,8 @@ describe("the Tests workflow runs the light suites on every pull request", () =>
     assert.ok(lint)
     assert.ok(!/shellcheck=/.test(lint.with?.args ?? ""))
     const extra = JSON.parse(readText(".test-tiers.json")).tiers.light.extra.find((e: any) => e.image.startsWith("rhysd/actionlint"))
+    assert.match(extra.image, /@sha256:[0-9a-f]{64}$/)
+    assert.equal(extra.image, lint.uses.replace(/^docker:\/\//, ""))
     assert.ok(!extra.args.some((a: string) => a.startsWith("-shellcheck")), "ShellCheck disabled in the light tier")
     assert.deepEqual(extra.args.filter((a: string) => a.endsWith(".yml")).sort(), [".github/workflows/deploy.yml", ".github/workflows/test.yml"])
   })

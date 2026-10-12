@@ -72,3 +72,13 @@ A few files in `quartz/` carry local changes that must be reapplied after an upd
 - `quartz/styles/custom.scss`, `quartz/static/icon.png` and `og-image.png`: the site's styles and icons.
 
 `plugins/note-properties` is a local copy of Quartz's frontmatter plugin. The upstream plugin still lets a page whose header starts with `---js` run JavaScript while the site is built, and it bundles an outdated `toml` parser. The local copy only accepts YAML, TOML and JSON headers and pins current parser versions. Its README lists every change against upstream. When updating Quartz, keep this copy unless upstream has fixed both problems. Run its tests with `npm ci && npm test` inside that folder.
+
+## Plugins
+Every plugin in `quartz.config.yaml`, apart from the local `plugins/note-properties`, is an npm package listed in `package.json`. `package-lock.json` pins its exact version and checksum, and `npm ci` installs only that version. `npx quartz plugin install --from-config` downloads nothing for these plugins: it only links and builds the local one.
+
+To update one plugin, run `npm install @quartz-community/<name>@<version>`, then review what changed, for example with `npm diff --diff=@quartz-community/<name>@<old> --diff=@quartz-community/<name>@<new>`. Commit `package.json` and `package-lock.json` together and let the Tests workflow run. Don't run a blanket `npm update`.
+
+Add a new plugin the same way: `npm install` it, then list it by its npm name in `quartz.config.yaml`. Never use a `github:`, `git+` or `https://` source, or `npx quartz plugin add`: the installer fetches those from the tip of a branch, and the contract tests (`tests/plugins-contract.test.ts`) refuse them. `quartz.lock.json` is a generated file and stays out of git.
+
+## Pinned images
+The node builder image is pinned by the same digest in the `Dockerfile`, `.github/workflows/test.yml` and `.test-tiers.json`. The actionlint image is pinned by digest in `test.yml` and `.test-tiers.json`. Change each image in all of its files in one commit; the contract tests fail otherwise.
