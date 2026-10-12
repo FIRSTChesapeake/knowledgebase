@@ -31,7 +31,10 @@ WORKDIR /src
 # dates from history. It stays in this stage and never reaches the final image.
 COPY . .
 
+# The local frontmatter plugin's dependencies come from its own lockfile
+# first, so the plugin install below finds a tree that already matches it.
 RUN npm ci --no-audit --no-fund \
+ && (cd plugins/note-properties && npm ci --no-audit --no-fund --ignore-scripts) \
  && npx quartz plugin install --from-config
 
 # The grep fails the build if the sed matched nothing.
