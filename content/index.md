@@ -18,7 +18,10 @@ Documentation for the platform that turns event livestreams into published match
 ****
 
 
-> [!summary] Knowledgebase version 26.11.0 (updated 10/1/26)
+> [!summary] Knowledgebase version 27.1.0 (updated 10/11/2026)
+> Changes from v26.11.0:
+> - Added an article on [[Scoring Server Setup]], specifically the (now-required) static IP address configuration. Since this marks configuration changes specifically related to the upcoming FTC 2026-2027 season, bumped the major version number.
+>   
 > Changes from v26.10.0:
 > - Updated the Event Streaming Management manual for the latest platform release: the YouTube preview setting and End preview, sending AV1, HEVC or VP9 video from OBS to YouTube and the new "Push failing — retrying" status, the setup-day test video for the day before an event, which events' match lists client members can see, plain-language reasons on upload errors, and the slower check interval for signs the platform doesn't control.
 > 
