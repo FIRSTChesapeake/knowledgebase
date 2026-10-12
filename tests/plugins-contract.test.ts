@@ -14,9 +14,10 @@ import { loadYaml, readText, repoPath } from "./helpers.ts"
 const LOCAL = /^\.\/plugins\/[a-z0-9-]+$/
 const NPM = /^@[a-z0-9-]+\/[a-z0-9-]+$/
 const REGISTRY = "https://registry.npmjs.org/"
-// A package.json spec that installs from somewhere other than the registry,
-// or under another package's name (an npm: alias).
-const FOREIGN_SPEC = /^(npm:|git|http|file:|github:|link:|workspace:)/
+// The only package.json specs allowed for a plugin: a registry version or a
+// caret or tilde range. Anything else (an npm: alias, a git, gist:, file: or
+// URL spec, GitHub's owner/repo shorthand) installs from somewhere else.
+const VERSION_SPEC = /^[~^]?\d+\.\d+\.\d+(-[\w.]+)?$/
 
 function sourceOf(entry: any): unknown {
   return typeof entry === "string" ? entry : entry?.source
@@ -45,7 +46,7 @@ function pluginSourceProblems(config: any, pkg: any, lock: any): string[] {
     } else if (NPM.test(source)) {
       const spec = pkg.dependencies?.[source]
       if (typeof spec !== "string") problems.push(`${source}: not in package.json dependencies`)
-      else if (FOREIGN_SPEC.test(spec)) problems.push(`${source}: package.json spec ${spec}`)
+      else if (!VERSION_SPEC.test(spec)) problems.push(`${source}: package.json spec ${spec}`)
       const locked = lock.packages?.[`node_modules/${source}`]
       if (!locked) {
         problems.push(`${source}: not in package-lock.json`)
@@ -138,6 +139,24 @@ describe("every Quartz plugin is a locked npm package or a local folder", () => 
       name: "a file: spec in package.json",
       mutate: (_c, p) => {
         p.dependencies[NPM_NAME] = "file:../explorer"
+      },
+    },
+    {
+      name: "a GitHub owner/repo shorthand in package.json",
+      mutate: (_c, p) => {
+        p.dependencies[NPM_NAME] = "quartz-community/explorer#main"
+      },
+    },
+    {
+      name: "a gist: spec in package.json",
+      mutate: (_c, p) => {
+        p.dependencies[NPM_NAME] = "gist:0123456789abcdef"
+      },
+    },
+    {
+      name: "a lock entry under another name, resolved path unchanged",
+      mutate: (_c, _p, l) => {
+        l.packages[KEY].name = "evil-explorer"
       },
     },
     {
@@ -239,16 +258,23 @@ describe("the local plugins", () => {
     }
   })
 
-  test("none asks the installer to install dependencies at build time (quartz.requiresInstall)", () => {
+  // The plugin manifest, read the way the loader reads it
+  // (quartz/plugins/loader/gitLoader.ts): `quartz`, else `manifest`.
+  const asksForInstall = (p: any) => "requiresInstall" in (p.quartz ?? p.manifest ?? {})
+
+  test("none asks the installer to install dependencies at build time (requiresInstall)", () => {
     const dirs = fs
       .readdirSync(repoPath("plugins"), { withFileTypes: true })
       .filter((d) => d.isDirectory() && fs.existsSync(repoPath("plugins", d.name, "package.json")))
       .map((d) => d.name)
     assert.ok(dirs.includes("note-properties"))
-    for (const d of dirs) {
-      const quartz = JSON.parse(readText(`plugins/${d}/package.json`)).quartz ?? {}
-      assert.ok(!("requiresInstall" in quartz), d)
-    }
+    for (const d of dirs) assert.ok(!asksForInstall(JSON.parse(readText(`plugins/${d}/package.json`))), d)
+  })
+
+  test("the requiresInstall check reads both quartz and manifest", () => {
+    assert.ok(asksForInstall({ quartz: { requiresInstall: true } }))
+    assert.ok(asksForInstall({ manifest: { requiresInstall: true } }))
+    assert.ok(!asksForInstall({ name: "x" }))
   })
 })
 
@@ -283,8 +309,11 @@ describe("every build installs from the lockfiles before the plugin install", ()
   const INSTALL = "npx quartz plugin install --from-config"
   const NPM_CI = "npm ci --no-audit --no-fund"
   // The local plugin's own npm ci, in a subshell, before the plugin install.
+  // The flags must end at whitespace or the subshell's close, so
+  // --ignore-scripts=false does not pass for --ignore-scripts.
   const localCi = (flags: string) =>
-    new RegExp(`\\(cd ${LOCAL_DIR} && [^()]*\\b${NPM_CI}${flags}\\b[^()]*\\)[^()]*${INSTALL}`)
+    new RegExp(`\\(cd ${LOCAL_DIR} && [^()]*\\b${NPM_CI}${flags}(?=[\\s)])[^()]*\\)[^()]*${INSTALL}`)
+  const scriptsBackOn = /--ignore-scripts=(?!true(?=[\s)]))|--no-ignore-scripts/
 
   test("the light tier", () => {
     const run = JSON.parse(readText(".test-tiers.json")).tiers.light.run as string
@@ -300,7 +329,18 @@ describe("every build installs from the lockfiles before the plugin install", ()
     assert.ok(install, "no RUN line installs the plugins")
     assert.ok(install.startsWith(`${NPM_CI} `), install)
     assert.match(install, localCi(" --ignore-scripts"))
+    assert.doesNotMatch(install, scriptsBackOn)
     for (const r of runs) assert.deepEqual(installProblems(r), [])
+  })
+
+  test("the install-scripts check refuses --ignore-scripts=false and a later override", () => {
+    const line = (flags: string) => `${NPM_CI} && (cd ${LOCAL_DIR} && ${NPM_CI}${flags}) && ${INSTALL}`
+    assert.match(line(" --ignore-scripts"), localCi(" --ignore-scripts"))
+    assert.doesNotMatch(line(" --ignore-scripts=false"), localCi(" --ignore-scripts"))
+    assert.doesNotMatch(line(""), localCi(" --ignore-scripts"))
+    assert.match(line(" --ignore-scripts --ignore-scripts=false"), scriptsBackOn)
+    assert.match(line(" --ignore-scripts --no-ignore-scripts"), scriptsBackOn)
+    assert.doesNotMatch(line(" --ignore-scripts"), scriptsBackOn)
   })
 
   test("the Tests workflow", () => {

@@ -22,7 +22,7 @@ Desired future additions:
 Required software: [Obsidian](https://obsidian.md) and [Node.JS](https://nodejs.org) v22 or higher.
 1. Clone the Github repository.
 2. Navigate to the folder of the cloned repository and issue the following command in a terminal:
-   `npm i`, then `npx quartz plugin install --from-config` (this builds the site's local frontmatter plugin, see "Updating Quartz" below).
+   `npm ci`, then `(cd plugins/note-properties && npm ci)`, then `npx quartz plugin install --from-config` (this builds the site's local frontmatter plugin, see "Updating Quartz" below).
 3. Open Obsidian, then select the "Open Folder as Vault" option.
 4. Navigate to the folder of the cloned repository and select the "content" folder within it, then select "Open Folder".
 e.g., if the repository has been cloned to C:\\Users\\Admin\\Documents\\Knowledgebase, you should open C:\\Users\\Admin\\Documents\\Knowledgebase\\content as the vault.
