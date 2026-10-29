@@ -5,16 +5,26 @@ name: Deploy knowledgebase
 # may be released. There is no manual dispatch: a run without a tag has no
 # version to publish.
 #
+# The site is served only from the Kubernetes cluster; GitHub Pages is turned
+# off. One run releases it (image, manifests, signature). This workflow holds
+# no cluster credential: it pushes the image and a release artifact of
+# k8s-do/ to GHCR, signs the artifact, and the cluster pulls the artifact
+# itself. Every job needs guard, directly or through another job.
+#
 # The guard job below runs from the workflow file at the tagged commit, so a
 # tag on an unmerged commit could carry an edited copy of it. It is a safety
-# net; the security control is the repo settings in k8s-do/README.md
-# (image-publish environment limited to v* tags, and a tag ruleset on v*).
+# net. Any workflow in this repo can push packages, so the registry is not the
+# control either. What the cluster trusts is the artifact's cosign signature,
+# made with a private key that only the manifest-sign environment holds. That
+# environment admits only v* tags, and only maintainers may create those tags
+# (k8s-do/README.md).
 #
-# The site is served only from the Kubernetes cluster; GitHub Pages is turned
-# off. One run releases it (image, manifests). This workflow holds no cluster
-# credential and no secret but GITHUB_TOKEN: it pushes the image and a
-# release artifact of k8s-do/ to GHCR, and the cluster pulls the artifact
-# itself. Every job needs guard, directly or through another job.
+# The key never shares a job with this repo's own code. preflight and sign
+# run in manifest-sign with no checkout, only pinned actions and their own
+# steps; image and manifests check out the repo, build, check and push, and
+# never see the key. A change to a script, the Dockerfile or k8s-do/ can
+# alter what is pushed (that is what review on main is for), but it cannot
+# read the key.
 on:
   push:
     tags: ['v[0-9]*.[0-9]*.[0-9]*']
@@ -30,10 +40,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # The one definition of a release tag: v + SemVer 2.0, without build
-  # metadata (a + is not allowed in an OCI tag). Every step that reads the
-  # tag checks it against this.
-  VERSION_TAG_RE: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?$'
+  # The one definition of a release tag: vMAJOR.MINOR.PATCH, no leading
+  # zeros, no pre-release or build suffix: no pre-release is ever signed and
+  # deployed. Every step that reads the tag checks it against this.
+  VERSION_TAG_RE: '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
 jobs:
   guard:
@@ -62,16 +72,58 @@ jobs:
           fi
           echo "Commit ${DEPLOY_SHA} is on main."
 
+  # The signing key lives in the manifest-sign environment, and a job gets
+  # every secret of its environment, referenced or not. So the two jobs in it,
+  # preflight and sign, check out nothing and run no file from this repo: only
+  # pinned actions and the scripts written here. Anything a commit on main
+  # could change (the Dockerfile, the release check, kustomize, k8s-do/) runs
+  # in image and manifests, which never see the key. Steps in one job share
+  # $GITHUB_ENV and $GITHUB_PATH, so this split is what keeps repo code from
+  # putting its own cosign in front of the key.
+  #
+  # Proves the key is there and decrypts with its password before anything
+  # is built or pushed, so a missing or broken key never spends a version on
+  # an artifact the cluster would refuse.
+  preflight:
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: manifest-sign
+    permissions: {}
+    steps:
+      # The installer verifies the binary.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      # cosign reads the key from the environment variable and its password
+      # from COSIGN_PASSWORD; neither reaches the command line. Deriving the
+      # public key decrypts the private one. The public key is not printed.
+      - name: Require the signing key
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          if [[ -z "${COSIGN_PRIVATE_KEY:-}" || -z "${COSIGN_PASSWORD:-}" ]]; then
+            echo "::error::COSIGN_PRIVATE_KEY and COSIGN_PASSWORD must both be set in the manifest-sign environment; nothing was pushed."
+            exit 1
+          fi
+          if ! cosign public-key --key env://COSIGN_PRIVATE_KEY > "${RUNNER_TEMP}/release.pub"; then
+            echo "::error::COSIGN_PRIVATE_KEY does not decrypt with COSIGN_PASSWORD; nothing was pushed."
+            exit 1
+          fi
+          echo "The signing key decrypts."
+
   # Builds the site into an nginx image (see Dockerfile) and pushes it to
   # GHCR tagged with the version only. It first refuses a version already
   # released, so a re-run never moves a released image's tag. The job's
-  # output is the pushed digest, and the release pins the image by digest. The image-publish environment (v* tags only,
-  # no reviewers) stops this unmodified workflow from pushing from any other
-  # ref. Like the guard it is not a control against repo writers (an
-  # edited workflow can drop it); manifests only uses the digest this run
-  # pushed.
+  # output is the pushed digest, and the release pins the image by digest.
+  # The image-publish environment (v* tags only, no reviewers, no secrets)
+  # stops this unmodified workflow from pushing from any other ref. Like the
+  # guard it is not a control against repo writers (an edited workflow can
+  # drop it). The image needs no signature of its own: the signed artifact
+  # pins it by digest.
   image:
-    needs: guard
+    needs: [guard, preflight]
     runs-on: ubuntu-22.04
     environment: image-publish
     permissions:
@@ -181,13 +233,18 @@ jobs:
   # kustomization.yaml only, never committed. The cluster deploys the
   # highest version in its range within minutes, so a pushed tag is a
   # release: an existing one is never overwritten.
+  #
+  # This job runs this repo's code (kustomize on k8s-do/, the release check)
+  # and so has no environment: it never holds the signing key. It outputs
+  # the digest it pushed, and sign signs exactly that.
   manifests:
     needs: [guard, image]
     runs-on: ubuntu-24.04
-    environment: image-publish
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     env:
       IMAGE: ${{ needs.image.outputs.image }}
       MANIFESTS: ${{ needs.image.outputs.manifests }}
@@ -290,10 +347,77 @@ jobs:
           fi
           echo "${ref} is free."
       - name: Push the release artifact
+        id: push
         run: |
           out="$(flux push artifact "oci://${MANIFESTS}:${GITHUB_REF_NAME}" \
             --path=./k8s-do \
             --source="https://github.com/${GITHUB_REPOSITORY}" \
             --revision="${GITHUB_REF_NAME}@sha1:${GITHUB_SHA}" \
             --output=json)"
-          echo "Pushed oci://${MANIFESTS}:${GITHUB_REF_NAME} ($(jq -r .digest <<<"$out"))."
+          digest="$(jq -r .digest <<<"$out")"
+          if [[ "$digest" == *$'\n'* || ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Unexpected artifact digest '${digest}'."
+            exit 1
+          fi
+          echo "Pushed oci://${MANIFESTS}:${GITHUB_REF_NAME} (${digest})."
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+  # Signs the artifact manifests pushed, with the release key held as
+  # secrets of the manifest-sign environment. A job gets every secret of its
+  # environment, referenced or not, so this job has no checkout and runs
+  # nothing from this repo: only the pinned cosign installer, the registry
+  # login and the step below. It takes nothing from manifests but the
+  # digest, which it checks again.
+  #
+  # The cluster applies only an artifact whose signature its copy of the
+  # public key verifies, that is, only what this workflow built and signed.
+  # An older signed digest copied to a new tag still verifies: that replay
+  # is the known risk (k8s-do/README.md, Release signing). Nothing is sent
+  # to a transparency log, and no job requests an OIDC token.
+  sign:
+    needs: manifests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: manifest-sign
+    permissions:
+      packages: write
+    steps:
+      # The installer verifies the binary. preflight ran the same install.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Signed by digest, never by tag, so the signature covers exactly what
+      # was pushed. Until it is signed the cluster refuses the artifact; if
+      # this job fails, the version is spent: cut the next patch version.
+      # The address is rebuilt here, not taken from manifests. The signature
+      # is stored as a sha256-<digest>.sig tag beside the artifact (cosign's
+      # classic format), which Flux verifies against a public key; the newer
+      # bundle format relies on the registry's referrers support.
+      # --tlog-upload=false keeps it out of the public Rekor log, and cosign
+      # accepts that only without a signing config. cosign reads the key from
+      # the environment variable and its password from COSIGN_PASSWORD;
+      # neither reaches the command line. The registry login above is reused.
+      - name: Sign the release artifact
+        env:
+          DIGEST: ${{ needs.manifests.outputs.digest }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          MANIFESTS="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/manifests/knowledgebase"
+          if [[ "$MANIFESTS" == *$'\n'* || ! "$MANIFESTS" =~ ^ghcr\.io/[a-z0-9-]+/manifests/knowledgebase$ ]]; then
+            echo "::error::Unexpected artifact repository '${MANIFESTS}'."
+            exit 1
+          fi
+          if [[ "$DIGEST" == *$'\n'* || ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Unexpected artifact digest '${DIGEST}'."
+            exit 1
+          fi
+          cosign sign --yes --key env://COSIGN_PRIVATE_KEY --tlog-upload=false \
+            --use-signing-config=false --new-bundle-format=false \
+            "${MANIFESTS}@${DIGEST}"
+          echo "Signed ${MANIFESTS}@${DIGEST}."
