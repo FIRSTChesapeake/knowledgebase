@@ -208,8 +208,8 @@ password may have leaked, or a maintainer with access leaves):
    `flux get sources oci` or from that release's `Deploy knowledgebase` run
    log, never from a tag you have not checked.
 6. Have a cluster admin remove the old public key from the Secret, leaving
-   the new one under `cosign.pub`. From then on an artifact signed only with
-   the old key is refused.
+   only the new one, under the key name it was added with in step 2. From
+   then on an artifact signed only with the old key is refused.
 
 On a suspected leak, remove the old key (step 6) straight after step 3,
 before the next release, and re-sign only releases whose digests you took

