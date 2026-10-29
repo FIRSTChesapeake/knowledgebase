@@ -18,7 +18,7 @@ If none of this helps, contact the FTA for resolution, and afterwards, please fi
 This state indicates that the Raspberry Pi kiosk successfully connected to the FTC-Live server, but was unable to determine what the current event is. If multiple events are defined in the FTC-Live database, this will trigger this error. The preferred way to fix this issue is to have the Technical Director (formerly Lead Scorekeeper) "hide" all events that are not currently being played. Talk with the Technical Director if you are seeing this issue. If the Technical Director hid all other events, reboot the kiosk to try again. If hiding is not possible, manually defining the current event code will fix this issue. To do this:
 1. Connect a USB keyboard to the Raspberry Pi. 
 2. While holding the left CTRL and ALT buttons, press F2. This will change to a text terminal view.
-3. Log in with the username `pi` and password `mushroom`.
+3. Log in with the username `pi`. Ask the event's AV lead, or check the team's password manager, for the current password.
 4. Execute the command exactly as shown: `nano /home/pi/.config/openbox/environment`
 5. A window should open with some textual content on the screen. If the top window is empty, or a small notification at the bottom of the dark window appears briefly saying `[New File]`, the command was run incorrectly. Check spelling and try again.
 6. Locate the line that says `FTCEVENTSERVER_EVENTCODE`. Replace any content after the equals sign with the event code of this event (check with the scorekeeper or FTA if you do not know this). Once finished, hold the CTRL key and hit the X key, then release both. When prompted, press Y to save, then Enter, accepting any overwrite notices.
@@ -28,11 +28,11 @@ If none of this helps, contact the FTA for resolution, and afterwards, please fi
 This state indicates something went wrong with running the startup script. You will likely need the assistance of the FTA to resolve this issue. To determine what went wrong:
 1. Connect a USB keyboard to the Raspberry Pi. 
 2. While holding the left CTRL and ALT buttons, press F2. This will change to a text terminal view.
-3. Log in with the username `pi` and password `mushroom`.
+3. Log in with the username `pi`. Ask the event's AV lead, or check the team's password manager, for the current password.
 4. Execute the command exactly as shown: `tail -n 5 /home/pi/RPIKiosk.log`
 5. Observe the time stamp at the beginning of the log lines. If they are recent, work with the FTA to diagnose the issue, potentially utilizing more of the contents of the log file. If they are not recent, execute the command exactly as shown:
 	`sudo dos2unix /etc/xdg/openbox/autostart`
-	You will need to enter the password of the `pi` user; `mushroom`.
+	You will need to enter the password of the `pi` user, the same one used to log in above.
 6. Reboot the Raspberry Pi after any actions to attempt starting the kiosk again.
 If none of this helps, continue to work with the FTA for resolution, and afterwards, please file an issue on this [document repository](https://github.com/FIRSTChesapeake/Knowledgebase/issues) so that it can be added to this list.
 ## Kiosk Error Messages
@@ -47,7 +47,7 @@ Note that the contents (IP address), (hostname), and (port) will be filled in by
 Verify that the IP address listed in the error message is the same as the IP address for the scorekeeper laptop. If it is not, reset the address using the steps below. If it is, verify that the FTC-Live software is running on the scorekeeper laptop, then reboot the Raspberry Pi.
 1. Connect a USB keyboard to the Raspberry Pi. 
 2. While holding the left CTRL and ALT buttons, press F2. This will change to a text terminal view.
-3. Log in with the username `pi` and password `mushroom`.
+3. Log in with the username `pi`. Ask the event's AV lead, or check the team's password manager, for the current password.
 4. Execute the command exactly as shown: `nano /home/pi/.config/openbox/environment`
 5. A window should open with some textual content on the screen. If the top window is empty, or a small notification at the bottom of the dark window appears briefly saying `[New File]`, the command was run incorrectly. Check spelling and try again.
 6. Locate the line that says `FTCEVENTSERVER_IP.` Replace any content after the equals sign with the IP address of the scoring server as it appears on the scorekeeper laptop. Once finished, hold the CTRL key and hit the X key, then release both. When prompted, press Y to save, then Enter, accepting any overwrite notices.
