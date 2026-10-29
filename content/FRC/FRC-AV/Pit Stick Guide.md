@@ -50,7 +50,7 @@ If the screen loads a ranking page for the wrong event, the route is likely conf
 4. Type the command:
    `cd Documents/` and press enter.
 5. Type the command:
-   `sudo ./intel_stick_setup.sh` and press enter. The sudo password is `mushroom`.
+   `sudo ./intel_stick_setup.sh` and press enter. Ask the event's AV lead, or check the team's password manager, for the sudo password.
 6. In the prompt, type the number corresponding to the route you are on, then press enter. If you do not enter a value, or enter an invalid value, the script defaults to the south route. This script should complete with a message stating "Setup complete". The warning displayed below is expected and can be ignored.
    ![[WIN_20260213_13_14_36_Pro.jpg]]
 7. Reboot the stick and try again.

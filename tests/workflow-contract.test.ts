@@ -6,7 +6,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import { parseAllDocuments } from "yaml"
-import { BAD_DOMAINS, GOOD_DOMAINS, deployWorkflow, loadYaml, readText, repoPath, runBash, scratchDir } from "./helpers.ts"
+import { BAD_DOMAINS, GOOD_DOMAINS, deployWorkflow, loadYaml, readText, repoPath, runBash, scratchDir, stubTools } from "./helpers.ts"
 
 const wf = deployWorkflow()
 const jobs: Record<string, any> = wf.jobs
@@ -25,20 +25,23 @@ const DIGEST = `sha256:${"a1".repeat(32)}`
 const IMAGE = `ghcr.io/firstchesapeake/knowledgebase@${DIGEST}`
 const MANIFESTS = "ghcr.io/firstchesapeake/manifests/knowledgebase"
 
-// Release tags: v + SemVer 2.0 without build metadata, at most 128 characters
-// (the OCI tag limit).
-const GOOD_TAGS = ["v26.14.0", "v0.0.1", "v1.2.3-rc.1", "v1.2.3-alpha-1.0a", "v1.2.3-0", `v1.2.3-${"a".repeat(121)}`]
+// Release tags: vMAJOR.MINOR.PATCH only, no leading zeros, at most 128
+// characters (the OCI tag limit). No pre-release is ever signed and deployed.
+const GOOD_TAGS = ["v26.14.0", "v0.0.1", "v0.1.0", "v1.10.3", "v10.0.0"]
 const BAD_TAGS = [
   "", "26.14.0", "v1.2", "v1.2.3.4", "v01.2.3", "v1.02.3", "v1.2.03", "v1.2.3-", "v1.2.3-01", "v1.2.3-a..b",
-  "v1.2.3+build.1", "v1.2.3,latest", "v1.2.3\nx", "\nv1.2.3", "main", "V1.2.3", `v1.2.3-${"a".repeat(122)}`,
+  "v1.2.3-rc.1", "v1.2.3-alpha", "v1.2.3-0", "v1.2.3+build.1", "v1.2.3,latest", "v1.2.3\nx", "\nv1.2.3", "main",
+  "V1.2.3", "v1.2.3;x", `v1.2.${"1".repeat(125)}`,
 ]
 
 // Problems with every permissions block: each must be exactly the expected
 // object (a string such as write-all is never one).
 const EXPECTED_PERMISSIONS: Record<string, unknown> = {
   guard: undefined,
+  preflight: {},
   image: { contents: "read", packages: "write" },
   manifests: { contents: "read", packages: "write" },
+  sign: { packages: "write" },
 }
 function permissionProblems(w: any): string[] {
   const problems: string[] = []
@@ -54,15 +57,26 @@ function permissionProblems(w: any): string[] {
   return problems
 }
 
-// Every reference to the secrets context but secrets.GITHUB_TOKEN, in any
-// key or value of the parsed workflow (comments are not parsed). Expressions
-// are case-insensitive, and if: conditions need no ${{ }}.
+// The signing key's two secrets, held by the manifest-sign environment.
+const COSIGN_SECRETS = ["secrets.COSIGN_PRIVATE_KEY", "secrets.COSIGN_PASSWORD"]
+// The jobs in manifest-sign. A job gets every secret of its environment,
+// referenced or not.
+const KEY_JOBS = ["preflight", "sign"]
+// The one step in each key job that may read the key.
+const SIGNING_STEPS: Record<string, string> = { preflight: "Require the signing key", sign: "Sign the release artifact" }
+const COSIGN_INSTALLER = "sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6"
+
+// Every reference to the secrets context but secrets.GITHUB_TOKEN and the
+// two cosign secrets, each named whole, in any key or value of the parsed
+// workflow (comments are not parsed). Expressions are case-insensitive, and
+// if: conditions need no ${{ }}.
 function foreignSecrets(w: unknown): string[] {
+  const allowed = ["secrets.GITHUB_TOKEN", ...COSIGN_SECRETS]
   const found: string[] = []
   const walk = (v: unknown) => {
     if (typeof v === "string") {
       for (const m of v.matchAll(/\bsecrets\b(\s*\.\s*[A-Za-z0-9_-]+)?/gi)) {
-        if (m[0] !== "secrets.GITHUB_TOKEN") found.push(m[0])
+        if (!allowed.includes(m[0])) found.push(m[0])
       }
     } else if (Array.isArray(v)) v.forEach(walk)
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) (walk(k), walk(x))
@@ -151,20 +165,22 @@ describe("trigger and on-main guard", () => {
     }
   })
 
-  test("the header says the workflow holds no cluster credential and the cluster pulls", () => {
-    assert.match(raw, /This workflow holds no cluster\n# credential/)
-    assert.match(raw, /the cluster pulls the artifact\n# itself/)
+  test("the header says the workflow holds no cluster credential, signs, and the cluster pulls", () => {
+    assert.match(raw, /This workflow holds\n# no cluster credential/)
+    assert.match(raw, /signs the artifact, and the cluster pulls the artifact\n# itself/)
+    assert.match(raw, /What the cluster trusts is the artifact's cosign signature/)
   })
 })
 
 describe("no cluster credential", () => {
-  test("no job references a kubeconfig, kubectl, helm, doctl or cosign", () => {
-    assert.ok(!/kubeconfig|kubectl|\bhelm\b|doctl|cosign|attest-build-provenance/i.test(raw))
+  test("no job references a kubeconfig, kubectl, helm, doctl or build attestation", () => {
+    assert.ok(!/kubeconfig|kubectl|\bhelm\b|doctl|attest-build-provenance/i.test(raw))
   })
 
-  test("no secret other than GITHUB_TOKEN", () => {
+  test("no secret other than GITHUB_TOKEN and the two cosign secrets", () => {
     assert.ok(/\$\{\{ secrets\.GITHUB_TOKEN \}\}/.test(raw))
     assert.deepEqual(foreignSecrets(wf), [])
+    assert.deepEqual([...new Set(raw.match(/secrets\.[A-Za-z0-9_]+/g))].sort(), ["secrets.GITHUB_TOKEN", ...COSIGN_SECRETS].sort())
   })
 
   test("the secrets check catches every form of reference", () => {
@@ -176,6 +192,8 @@ describe("no cluster credential", () => {
       "${{ SECRETS.DEPLOY_KEY }}",
       "${{ secrets . DEPLOY_KEY }}",
       "${{ secrets.GITHUB_TOKEN_2 }}",
+      "${{ secrets.COSIGN_PRIVATE_KEY_2 }}",
+      "${{ secrets['COSIGN_PRIVATE_KEY'] }}",
     ]
     for (const form of forms) {
       const w = structuredClone(wf)
@@ -225,23 +243,32 @@ describe("permissions", () => {
     }
   })
 
-  test("packages: write appears only on the image and manifests jobs, each in image-publish", () => {
+  test("packages: write appears only on the image, manifests and sign jobs", () => {
     const writers = Object.entries(jobs).filter(([, j]) => j.permissions?.packages === "write")
-    assert.deepEqual(writers.map(([name]) => name).sort(), ["image", "manifests"])
-    for (const [name, job] of writers) assert.equal(job.environment, "image-publish", name)
+    assert.deepEqual(writers.map(([name]) => name).sort(), ["image", "manifests", "sign"])
     assert.equal(wf.permissions.packages, undefined, "no workflow-level packages permission")
   })
 
-  test("no job holds id-token or pages write: no signing, and GitHub Pages is not published", () => {
+  test("only image runs in image-publish, and only preflight and sign in manifest-sign", () => {
+    const envs = Object.fromEntries(Object.entries(jobs).map(([name, j]) => [name, j.environment]))
+    assert.deepEqual(envs, { guard: undefined, preflight: "manifest-sign", image: "image-publish", manifests: undefined, sign: "manifest-sign" })
+  })
+
+  test("no job holds id-token or pages write: no keyless signing, and GitHub Pages is not published", () => {
     for (const [name, job] of Object.entries(jobs)) {
       assert.equal(job.permissions?.pages, undefined, name)
       assert.equal(job.permissions?.["id-token"], undefined, name)
     }
+    for (const file of [".github/workflows/deploy.yml", ".github/workflows/test.yml"]) {
+      assert.ok(!readText(file).includes("id-token"), `${file} requests an OIDC token`)
+    }
   })
 
-  test("the README requires the environment's v* rule and package Actions access", () => {
+  test("the README requires each environment's v* tag rule and package Actions access", () => {
     const readme = readText("k8s-do/README.md")
     assert.match(readme, /Environment `image-publish`[^:]*:\s+\*\*Deployment\s+branches and tags:\*\*\s+selected only, the single rule\s+tag `v\*`\./)
+    assert.match(readme, /Environment `manifest-sign`[^:]*:\s+\*\*Deployment\s+branches and tags:\*\*\s+selected only, the single rule\s+\*\*Ref type: Tag\*\*, pattern `v\*`\./)
+    assert.match(readme, /exactly\s+two\s+secrets,\s+`COSIGN_PRIVATE_KEY`\s+and\s+`COSIGN_PASSWORD`/)
     assert.match(readme, /\*\*Manage Actions access\*\*: only this repository/)
     assert.match(readme, /`manifests\/knowledgebase`/)
   })
@@ -253,6 +280,349 @@ describe("permissions", () => {
     assert.match(required, /\*\*push ruleset\*\*[\s\S]*\*\*Restrict file paths\*\* with the path `\.github\/workflows\/\*\*`/)
     assert.match(required, /\*\*write access for maintainers\s+only\*\*/)
     assert.ok(!/optional/i.test(required), "nothing in the required section is optional")
+  })
+})
+
+describe("release signing", () => {
+  const stepNamed = (job: string, name: string) => {
+    const step = jobs[job].steps.find((s: any) => s.name === name)
+    assert.ok(step, `${job}: ${name}`)
+    return step
+  }
+
+  test("preflight proves the key after guard; image waits for it; sign follows manifests", () => {
+    assert.deepEqual(needsOf(jobs.guard), [])
+    assert.deepEqual(needsOf(jobs.preflight), ["guard"])
+    // Nothing is built or pushed until guard passes and the key is proved.
+    assert.deepEqual(needsOf(jobs.image).sort(), ["guard", "preflight"])
+    assert.deepEqual(needsOf(jobs.manifests).sort(), ["guard", "image"])
+    assert.deepEqual(needsOf(jobs.sign), ["manifests"])
+  })
+
+  // What a key job may run: pinned installers and login, nothing from the repo.
+  const KEY_JOB_USES: Record<string, string[]> = {
+    preflight: [COSIGN_INSTALLER],
+    sign: [COSIGN_INSTALLER, "docker/login-action@dbcb813823bdd20940b903addbd779551569679f"],
+  }
+  const REPO_FILE =
+    /scripts\/|k8s-do|tests\/|\.github|\.\/|\bnode\b|\bnpm\b|\bnpx\b|\bpython|\bbash\b|\bsh\b|\bsource\b|\bgit\b|\bcurl\b|\bwget\b|\bgh\b|(^|[;&|]\s*)\.\s/m
+  // Each key job's exact shape. A container:, services:, strategy:, job env:
+  // or another runner would run the key's job somewhere these tests cannot
+  // see; an extra step key (working-directory, shell, id) changes how a step
+  // runs. Steps are listed in order, each by its sorted keys.
+  const KEY_JOB_KEYS = ["environment", "needs", "permissions", "runs-on", "steps", "timeout-minutes"]
+  const KEY_JOB_STEP_KEYS: Record<string, string[][]> = {
+    preflight: [["uses", "with"], ["env", "name", "run"]],
+    sign: [["uses", "with"], ["uses", "with"], ["env", "name", "run"]],
+  }
+  const SIGNING_STEP_ENV: Record<string, string[]> = {
+    preflight: ["COSIGN_PASSWORD", "COSIGN_PRIVATE_KEY"],
+    sign: ["COSIGN_PASSWORD", "COSIGN_PRIVATE_KEY", "DIGEST"],
+  }
+  const LOGIN_WITH = { registry: "ghcr.io", username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+  // The only places a key step's script may name the key or its password,
+  // each at most once: the presence checks, and cosign's env:// reference.
+  // Anything else that expands either, or dumps the environment, could print
+  // them; a second env:// could sign something else.
+  const KEY_USES_ALLOWED = ['-z "${COSIGN_PRIVATE_KEY:-}"', '-z "${COSIGN_PASSWORD:-}"', "--key env://COSIGN_PRIVATE_KEY"]
+  const KEY_LEAK =
+    /\$\{?[!#]?COSIGN_(PRIVATE_KEY|PASSWORD)|\$\{!|\bprintenv\b|\benv\b|\bdeclare\b|\btypeset\b|\bexport\b|\bcompgen\b|\/proc\/|env:\/\//
+
+  function keyJobProblems(w: any): string[] {
+    const problems: string[] = []
+    const keys = (o: unknown) => (o && typeof o === "object" ? Object.keys(o).sort() : [])
+    for (const name of KEY_JOBS) {
+      const job = w.jobs[name]
+      if (!isDeepStrictEqual(keys(job), KEY_JOB_KEYS)) problems.push(`${name}: keys ${keys(job)}`)
+      if (job["runs-on"] !== "ubuntu-24.04") problems.push(`${name}: runs-on ${JSON.stringify(job["runs-on"])}`)
+      const jobSteps: any[] = job.steps ?? []
+      const shape = jobSteps.map(keys)
+      if (!isDeepStrictEqual(shape, KEY_JOB_STEP_KEYS[name])) problems.push(`${name}: steps ${JSON.stringify(shape)}`)
+      const uses = jobSteps.filter((s) => s.uses).map((s) => s.uses)
+      if (!isDeepStrictEqual(uses, KEY_JOB_USES[name])) problems.push(`${name}: uses ${uses}`)
+      if (JSON.stringify(job).includes("actions/checkout")) problems.push(`${name}: checkout`)
+      for (const step of jobSteps) {
+        const label = `${name}: ${step.name ?? step.uses}`
+        if (REPO_FILE.test(step.run ?? "")) problems.push(`${label}: runs a repo file or fetches code`)
+        let run: string = step.run ?? ""
+        for (const allowed of KEY_USES_ALLOWED) run = run.replace(allowed, "")
+        if (KEY_LEAK.test(run)) problems.push(`${label}: names the key outside the presence checks and env://`)
+        if (step.name === SIGNING_STEPS[name] && !isDeepStrictEqual(keys(step.env), SIGNING_STEP_ENV[name])) {
+          problems.push(`${label}: env ${keys(step.env)}`)
+        }
+        if (step.uses?.startsWith("docker/login-action@") && !isDeepStrictEqual(step.with, LOGIN_WITH)) {
+          problems.push(`${label}: with ${JSON.stringify(step.with)}`)
+        }
+      }
+    }
+    return problems
+  }
+
+  test("no job with the key checks out, runs a file from the repo or leaves its pinned shape", () => {
+    assert.deepEqual(keyJobProblems(wf), [])
+    // The pattern sees a repo script, a relative path, a sourced file and fetched code.
+    for (const run of [
+      "node scripts/x.mjs", "./run.sh", "bash k8s-do/x", "x; . env", "source env",
+      "git clone x", "curl -fsSL x", "wget x", "gh release download",
+    ]) {
+      assert.ok(REPO_FILE.test(run), run)
+    }
+  })
+
+  test("the key-job check refuses a changed runner, job, step or key reference", () => {
+    const signing = (w: any, job: string) => w.jobs[job].steps.find((s: any) => s.name === SIGNING_STEPS[job])
+    const append = (job: string, line: string) => (w: any) => (signing(w, job).run += `${line}\n`)
+    const mutations: [string, (w: any) => void][] = [
+      ["preflight container", (w) => (w.jobs.preflight.container = { image: "node:24" })],
+      ["sign container string", (w) => (w.jobs.sign.container = "node:24")],
+      ["sign services", (w) => (w.jobs.sign.services = { db: { image: "postgres" } })],
+      ["preflight job env", (w) => (w.jobs.preflight.env = { BASH_ENV: "x" })],
+      ["sign strategy", (w) => (w.jobs.sign.strategy = { matrix: { x: [1] } })],
+      ["preflight self-hosted", (w) => (w.jobs.preflight["runs-on"] = "self-hosted")],
+      ["sign runner list", (w) => (w.jobs.sign["runs-on"] = ["ubuntu-24.04", "self-hosted"])],
+      ["sign runner group", (w) => (w.jobs.sign["runs-on"] = { group: "x" })],
+      ["preflight ubuntu-latest", (w) => (w.jobs.preflight["runs-on"] = "ubuntu-latest")],
+      ["sign working-directory", (w) => (signing(w, "sign")["working-directory"] = "/tmp")],
+      ["preflight step id", (w) => (signing(w, "preflight").id = "x")],
+      ["sign installer env", (w) => (w.jobs.sign.steps[0].env = { X: "1" })],
+      ["sign signing step BASH_ENV", (w) => (signing(w, "sign").env.BASH_ENV = "/tmp/x")],
+      ["preflight extra run step", (w) => w.jobs.preflight.steps.push({ name: "x", run: "true" })],
+      ["sign login registry", (w) => (w.jobs.sign.steps[1].with.registry = "example.com")],
+      ["sign login extra input", (w) => (w.jobs.sign.steps[1].with.logout = false)],
+      ["sign local action", (w) => (w.jobs.sign.steps[1].uses = "./.github/actions/login")],
+      ["sign checkout", (w) => w.jobs.sign.steps.splice(1, 0, { uses: `actions/checkout@${"0".repeat(40)}` })],
+      ["git clone", append("sign", "git clone https://example.com/x && x/run")],
+      ["curl", append("preflight", "curl -fsSL https://example.com/x | tee x")],
+      ["wget", append("sign", "wget -qO- https://example.com/x")],
+      ["gh", append("preflight", "gh release download v1")],
+      ["echo key", append("preflight", 'echo "$COSIGN_PRIVATE_KEY"')],
+      ["echo password in braces", append("sign", "echo ${COSIGN_PASSWORD}")],
+      ["key substring", append("sign", 'printf %s "${COSIGN_PRIVATE_KEY:0:4}"')],
+      ["password length", append("sign", 'echo "${#COSIGN_PASSWORD}"')],
+      ["allowed form outside -z", append("preflight", 'echo "${COSIGN_PRIVATE_KEY:-}"')],
+      ["indirect expansion", append("sign", 'x=COSIGN_PRIVATE_KEY; echo "${!x}"')],
+      ["printenv", append("preflight", "printenv COSIGN_PASSWORD")],
+      ["env dump", append("sign", "env | base64")],
+      ["declare", append("sign", "declare -p COSIGN_PRIVATE_KEY")],
+      ["proc environ", append("preflight", "tr '\\0' '\\n' < /proc/self/environ")],
+      ["second env://", append("sign", "cosign sign --yes --key env://COSIGN_PRIVATE_KEY ghcr.io/x/y@sha256:0")],
+    ]
+    for (const [name, mutate] of mutations) {
+      const w = structuredClone(wf)
+      mutate(w)
+      assert.notDeepEqual(keyJobProblems(w), [], name)
+    }
+  })
+
+  test("secrets are only ever named one at a time", () => {
+    // toJSON(secrets) or secrets['X'] would hand over secrets a name search misses.
+    for (const file of [".github/workflows/deploy.yml", ".github/workflows/test.yml"]) {
+      for (const [, expr] of readText(file).matchAll(/\$\{\{([\s\S]*?)\}\}/g)) {
+        if (/secrets/i.test(expr)) assert.match(expr, /^\s*secrets\.[A-Za-z0-9_]+\s*$/, `${file}: ${expr}`)
+      }
+    }
+    assert.ok(!readText(".github/workflows/test.yml").includes("manifest-sign"))
+  })
+
+  test("the signing key reaches only the two signing steps", () => {
+    // Workflow- or job-level env would hand a secret to every step.
+    assert.ok(!JSON.stringify(wf.env ?? {}).includes("secrets."))
+    for (const [name, job] of Object.entries(jobs)) {
+      assert.ok(!JSON.stringify(job.env ?? {}).includes("secrets."), name)
+      const holders = job.steps
+        .filter((s: any) => COSIGN_SECRETS.some((secret) => JSON.stringify(s).includes(secret)))
+        .map((s: any) => s.name)
+      assert.deepEqual(holders, name in SIGNING_STEPS ? [SIGNING_STEPS[name]] : [], name)
+    }
+    for (const name of KEY_JOBS) {
+      const env = stepNamed(name, SIGNING_STEPS[name]).env
+      assert.equal(env.COSIGN_PRIVATE_KEY, "${{ secrets.COSIGN_PRIVATE_KEY }}")
+      assert.equal(env.COSIGN_PASSWORD, "${{ secrets.COSIGN_PASSWORD }}")
+    }
+  })
+
+  test("the key steps cannot be traced, reshelled or softened", () => {
+    // Tracing would print the key; another shell would change how the step
+    // runs where these tests cannot see it; continue-on-error or an if: would
+    // let a gate pass by being skipped.
+    assert.equal(wf.defaults, undefined)
+    for (const [name, job] of Object.entries(jobs)) {
+      assert.equal(job.defaults, undefined, name)
+      assert.equal(job["continue-on-error"], undefined, name)
+      assert.equal(job.if, undefined, name)
+    }
+    for (const name of KEY_JOBS) {
+      for (const step of jobs[name].steps) {
+        const label = `${name}: ${step.name ?? step.uses}`
+        assert.equal(step.shell, undefined, label)
+        assert.equal(step["continue-on-error"], undefined, label)
+        assert.equal(step.if, undefined, label)
+        for (const word of ["set -x", "set -o xtrace", "xtrace", "set -v", "BASH_XTRACEFD", "SHELLOPTS"]) {
+          assert.ok(!(step.run ?? "").includes(word), `${label}: ${word}`)
+        }
+        for (const value of Object.values(step.env ?? {})) assert.ok(!String(value).includes("xtrace"), label)
+      }
+    }
+  })
+
+  test("cosign is installed, pinned, first in each key job and nowhere else", () => {
+    for (const name of KEY_JOBS) {
+      const s = jobs[name].steps
+      const installers = s.filter((x: any) => x.uses?.startsWith("sigstore/cosign-installer@"))
+      assert.equal(installers.length, 1, name)
+      assert.equal(installers[0], s[0], name)
+      assert.deepEqual(installers[0].with, { "cosign-release": "v3.1.3" })
+    }
+    for (const name of ["guard", "image", "manifests"]) assert.ok(!/cosign/i.test(JSON.stringify(jobs[name])), name)
+  })
+
+  describe("preflight proves the key before anything is built or pushed", () => {
+    const step = stepNamed("preflight", "Require the signing key")
+
+    test("is the last step and derives the public key from the private one", () => {
+      assert.equal(jobs.preflight.steps.at(-1), step)
+      assert.ok(step.run.includes('cosign public-key --key env://COSIGN_PRIVATE_KEY > "${RUNNER_TEMP}/release.pub"'))
+    })
+
+    const cases: [string, string, boolean, boolean][] = [
+      ["k", "p", true, true],
+      ["k", "p", false, false],
+      ["", "p", true, false],
+      ["k", "", true, false],
+      ["", "", true, false],
+    ]
+    for (const [key, password, decrypts, ok] of cases) {
+      test(`key ${key ? "set" : "empty"}, password ${password ? "set" : "empty"}, ${decrypts ? "decrypts" : "does not decrypt"}: ${ok ? "passes" : "fails"}`, () => {
+        const dir = scratchDir()
+        const args = path.join(dir, "args")
+        const bin = stubTools({ cosign: `printf '%s\\n' "$@" > "${args}"\necho PUBLIC\nexit ${decrypts ? 0 : 1}` })
+        const r = runBash(step.run, {
+          PATH: `${bin}:${process.env.PATH}`,
+          RUNNER_TEMP: dir,
+          COSIGN_PRIVATE_KEY: key,
+          COSIGN_PASSWORD: password,
+        })
+        assert.equal(r.status === 0, ok, r.stdout + r.stderr)
+        assert.ok(!r.stdout.includes("PUBLIC"), "the public key is not printed")
+        if (!ok) assert.match(r.stdout, /nothing was pushed/)
+        if (key && password) {
+          assert.deepEqual(fs.readFileSync(args, "utf8").split("\n").filter(Boolean), ["public-key", "--key", "env://COSIGN_PRIVATE_KEY"])
+        } else assert.ok(!fs.existsSync(args), "cosign is not run without a key and password")
+      })
+    }
+  })
+
+  describe("manifests outputs the digest it pushed, validated", () => {
+    const step = stepNamed("manifests", "Push the release artifact")
+
+    test("the push is the last step, and its digest is the job's only output", () => {
+      assert.equal(jobs.manifests.steps.at(-1), step)
+      assert.equal(step.id, "push")
+      assert.ok(step.run.includes('echo "digest=${digest}" >> "$GITHUB_OUTPUT"'))
+      assert.deepEqual(jobs.manifests.outputs, { digest: "${{ steps.push.outputs.digest }}" })
+    })
+
+    const good = `sha256:${"a".repeat(64)}`
+    for (const [digest, ok] of [
+      [good, true],
+      [`sha256:${"A".repeat(64)}`, false],
+      [`sha256:${"a".repeat(63)}`, false],
+      ["null", false],
+      ["", false],
+      [`${good}\nx=y`, false],
+    ] as const) {
+      test(`digest ${JSON.stringify(digest)} is ${ok ? "output" : "refused, nothing output"}`, () => {
+        const dir = scratchDir()
+        const out = path.join(dir, "output")
+        fs.writeFileSync(out, "")
+        fs.writeFileSync(path.join(dir, "digest"), digest)
+        // jq is not on every test image: this stand-in answers the step's one
+        // query, `jq -r .digest`, and nothing else.
+        const bin = stubTools({
+          flux: 'echo "{}"',
+          jq: `[ "$1 $2" = "-r .digest" ] || exit 9\ncat >/dev/null\ncat "${path.join(dir, "digest")}"\necho`,
+        })
+        const r = runBash(step.run, {
+          PATH: `${bin}:${process.env.PATH}`,
+          MANIFESTS,
+          GITHUB_REF_NAME: "v26.14.0",
+          GITHUB_REPOSITORY: "firstchesapeake/knowledgebase",
+          GITHUB_SHA: "0".repeat(40),
+          GITHUB_OUTPUT: out,
+        })
+        assert.equal(r.status === 0, ok, r.stdout + r.stderr)
+        assert.equal(fs.readFileSync(out, "utf8"), ok ? `digest=${digest}\n` : "")
+      })
+    }
+  })
+
+  describe("sign signs exactly the pushed digest", () => {
+    const step = stepNamed("sign", "Sign the release artifact")
+
+    test("signs by digest after the login, with a static key, no Rekor upload and the classic format", () => {
+      const s = jobs.sign.steps
+      assert.equal(s.at(-1), step)
+      assert.ok(s.findIndex((x: any) => x.uses?.startsWith("docker/login-action@")) < s.indexOf(step))
+      assert.equal(step.env.DIGEST, "${{ needs.manifests.outputs.digest }}")
+      // The address is rebuilt and checked here, never taken from manifests.
+      assert.ok(step.run.includes('MANIFESTS="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/manifests/knowledgebase"'))
+      assert.ok(step.run.includes("^ghcr\\.io/[a-z0-9-]+/manifests/knowledgebase$"))
+      assert.ok(step.run.includes("^sha256:[0-9a-f]{64}$"))
+      assert.equal(step.run.split("cosign sign ").length - 1, 1)
+      for (const flag of ["--yes", "--key env://COSIGN_PRIVATE_KEY", "--tlog-upload=false", "--use-signing-config=false", "--new-bundle-format=false"]) {
+        assert.ok(step.run.includes(flag), flag)
+      }
+      assert.ok(step.run.includes('"${MANIFESTS}@${DIGEST}"'))
+      assert.ok(!step.run.includes("GITHUB_REF_NAME"), "never by tag")
+      // Keyless signing would need an OIDC token and the transparency log.
+      for (const word of ["sign-blob", "--identity-token", "--oidc", "--tlog-upload=true"]) assert.ok(!step.run.includes(word), word)
+    })
+
+    const good = `sha256:${"a".repeat(64)}`
+    for (const [owner, digest, ok] of [
+      ["FIRSTChesapeake", good, true],
+      ["FIRSTChesapeake", "", false],
+      ["FIRSTChesapeake", "v26.14.0", false],
+      ["FIRSTChesapeake", `${good}\n`, false],
+      ["FIRSTChesapeake", `${good}@sha256:${"b".repeat(64)}`, false],
+      ["x/y", good, false],
+      ["x\ny", good, false],
+    ] as const) {
+      test(`owner ${JSON.stringify(owner)}, digest ${JSON.stringify(digest)}: ${ok ? "signed" : "refused"}`, () => {
+        const args = path.join(scratchDir(), "args")
+        const bin = stubTools({ cosign: `printf '%s\\n' "$@" > "${args}"` })
+        const r = runBash(step.run, {
+          PATH: `${bin}:${process.env.PATH}`,
+          // A MANIFESTS already in the environment must not change what is signed.
+          MANIFESTS: "ghcr.io/evil/manifests/knowledgebase",
+          GITHUB_REPOSITORY_OWNER: owner,
+          DIGEST: digest,
+          COSIGN_PRIVATE_KEY: "key-material",
+          COSIGN_PASSWORD: "password",
+        })
+        assert.equal(r.status === 0, ok, r.stdout + r.stderr)
+        if (ok) {
+          const argv = fs.readFileSync(args, "utf8").split("\n").filter(Boolean)
+          assert.equal(argv[0], "sign")
+          assert.equal(argv.at(-1), `${MANIFESTS}@${digest}`)
+          assert.ok(!argv.includes("key-material") && !argv.includes("password"), "no secret on the command line")
+        } else assert.ok(!fs.existsSync(args), "cosign is not run")
+      })
+    }
+  })
+
+  test("the README covers the key, its rotation, the replay risk and the rollout order", () => {
+    const readme = readText("k8s-do/README.md")
+    const at = readme.indexOf("## Release signing")
+    assert.ok(at >= 0, "a Release signing section")
+    const section = readme.slice(at)
+    assert.match(section, /cosign generate-key-pair/)
+    assert.match(section, /`flux-system\/knowledgebase-cosign-pub`/)
+    assert.match(section, /\*\*Rotating the key\*\*/)
+    assert.match(section, /\*\*Known risk \(accepted\)\.\*\*/)
+    assert.match(section, /--tlog-upload=false/)
+    assert.match(section, /applies only what the release\s+workflow built and signed/)
+    assert.match(section, /\*\*Order\.\*\*/)
   })
 })
 
@@ -430,7 +800,7 @@ describe("one release definition, one run per tag", () => {
     assert.ok(!/=~ \^v/.test(raw), "a second, inline tag pattern")
   })
 
-  test("the pattern is SemVer 2.0 without build metadata", () => {
+  test("the pattern is vX.Y.Z only: no pre-release or build suffix", () => {
     const re = new RegExp(wf.env.VERSION_TAG_RE)
     for (const tag of GOOD_TAGS) assert.ok(re.test(tag), tag)
     for (const tag of BAD_TAGS.filter((t) => t.length <= 128 && !t.includes("\n"))) assert.ok(!re.test(tag), tag)
@@ -479,18 +849,9 @@ describe("manifests job", () => {
   }
   const index = (pred: (x: any) => boolean) => s.findIndex(pred)
 
-  // A directory holding stand-ins for the given tools, each a shell script.
-  function tools(scripts: Record<string, string>): string {
-    const dir = scratchDir()
-    for (const [name, body] of Object.entries(scripts)) {
-      fs.writeFileSync(path.join(dir, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 })
-    }
-    return dir
-  }
-
-  test("needs guard and image, runs in image-publish with exactly contents: read, packages: write", () => {
+  test("needs guard and image, has no environment (never the key) and exactly contents: read, packages: write", () => {
     assert.deepEqual(needsOf(job).sort(), ["guard", "image"])
-    assert.equal(job.environment, "image-publish")
+    assert.equal(job.environment, undefined)
     assert.deepEqual(job.permissions, { contents: "read", packages: "write" })
   })
 
@@ -778,7 +1139,7 @@ describe("manifests job", () => {
   describe("an existing release is never overwritten", () => {
     const run = named("Refuse to overwrite a release").run
     function refuse(flux: string) {
-      const bin = tools({ flux })
+      const bin = stubTools({ flux })
       const tmp = scratchDir()
       return runBash(run, { PATH: `${bin}:${process.env.PATH}`, MANIFESTS, GITHUB_REF_NAME: "v26.14.0", RUNNER_TEMP: tmp })
     }
@@ -817,8 +1178,8 @@ describe("manifests job", () => {
 })
 
 describe("GitHub Pages is retired", () => {
-  test("the jobs are exactly guard, image and manifests", () => {
-    assert.deepEqual(Object.keys(jobs).sort(), ["guard", "image", "manifests"])
+  test("the jobs are exactly guard, preflight, image, manifests and sign", () => {
+    assert.deepEqual(Object.keys(jobs).sort(), ["guard", "image", "manifests", "preflight", "sign"])
   })
 
   test("no Pages action, pages concurrency group or github-pages environment", () => {
