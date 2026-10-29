@@ -114,3 +114,13 @@ export function scratchDir(): string {
 export function deployWorkflow(): any {
   return loadYaml(".github/workflows/deploy.yml")
 }
+
+// A directory holding stand-ins for the given tools, each a shell script.
+// Put it first on PATH to run a workflow step against them.
+export function stubTools(scripts: Record<string, string>): string {
+  const dir = scratchDir()
+  for (const [name, body] of Object.entries(scripts)) {
+    fs.writeFileSync(path.join(dir, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 })
+  }
+  return dir
+}
