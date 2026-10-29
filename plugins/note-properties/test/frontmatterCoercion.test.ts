@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { VFile } from "vfile";
+import toml from "toml";
 import { NoteProperties } from "../src/transformer";
 import type { BuildCtx } from "@quartz-community/types";
 
@@ -116,6 +117,61 @@ describe("toml frontmatter", () => {
 
   it("invalid toml throws", () => {
     expect(() => parse("---toml\na = 1\na = 2\n---\n")).toThrow();
+  });
+
+  it("keeps the value types of every other property", () => {
+    const fm = parse(
+      [
+        "---toml",
+        'title = "Hello"',
+        "weight = 42",
+        "negative = -7",
+        "hex = 0xff",
+        "ratio = 1.5",
+        "draft = false",
+        'authors = ["a", "b"]',
+        "matrix = [[1, 2], [3]]",
+        "point = { x = 1, y = 2 }",
+        'site.section.name = "docs"',
+        "local_dt = 2024-01-02T03:04:05",
+        "local_time = 07:32:00",
+        "[extra]",
+        'key = "v"',
+        "---",
+        "",
+      ].join("\n"),
+    );
+    expect(fm.title).toBe("Hello");
+    expect(fm.weight).toBe(42);
+    expect(fm.negative).toBe(-7);
+    expect(fm.hex).toBe(255);
+    expect(fm.ratio).toBe(1.5);
+    expect(fm.draft).toBe(false);
+    expect(fm.authors).toEqual(["a", "b"]);
+    expect(fm.matrix).toEqual([[1, 2], [3]]);
+    expect(fm.point).toEqual({ x: 1, y: 2 });
+    expect(fm.site).toEqual({ section: { name: "docs" } });
+    expect(fm.local_dt).toBe("2024-01-02T03:04:05");
+    expect(fm.local_time).toBe("07:32:00");
+    expect(fm.extra).toEqual({ key: "v" });
+  });
+
+  it("an integer beyond the safe range throws rather than rounding", () => {
+    expect(() => parse("---toml\nviews = 9007199254740993\n---\n")).toThrow();
+  });
+
+  // toml 4.x resolved dotted keys in quadratic time (GHSA-9j65-hcg3-gc64): this key
+  // took several seconds there and parses in tens of milliseconds on 5.0.1.
+  it("a long dotted key parses in linear time", () => {
+    const segments = 10000;
+    const key = Array.from({ length: segments }, (_, i) => `k${i}`).join(".");
+    const start = performance.now();
+    const data = toml.parse(`${key} = 1\n`) as Record<string, unknown>;
+    const elapsed = performance.now() - start;
+    let node: unknown = data;
+    for (let i = 0; i < segments; i++) node = (node as Record<string, unknown>)[`k${i}`];
+    expect(node).toBe(1);
+    expect(elapsed).toBeLessThan(1000);
   });
 });
 
