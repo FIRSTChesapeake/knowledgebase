@@ -398,6 +398,13 @@ describe("every build installs from the lockfiles before the plugin install", ()
     })
   }
 
+  test("the install check's verb regex is linear, not exponential, in the flags it skips", () => {
+    const hostile = "npm -" + "-- -".repeat(5000)
+    const start = performance.now()
+    installProblems(hostile)
+    assert.ok(performance.now() - start < 500, "installProblems took too long on a hostile string")
+  })
+
   test("the Dockerfile reader refuses a heredoc RUN and unwraps the exec form", () => {
     assert.notDeepEqual(dockerRuns("RUN <<EOF\nnpm install\nEOF\n").problems, [])
     assert.notDeepEqual(dockerRuns("RUN --mount=type=cache,target=/x <<-'EOT'\nnpm i\nEOT\n").problems, [])

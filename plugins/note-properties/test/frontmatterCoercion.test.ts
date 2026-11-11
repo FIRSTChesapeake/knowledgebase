@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { VFile } from "vfile";
+import toml from "toml";
 import { NoteProperties } from "../src/transformer";
 import type { BuildCtx } from "@quartz-community/types";
 
@@ -116,6 +117,20 @@ describe("toml frontmatter", () => {
 
   it("invalid toml throws", () => {
     expect(() => parse("---toml\na = 1\na = 2\n---\n")).toThrow();
+  });
+
+  // toml 4.x resolved dotted keys in quadratic time (GHSA-9j65-hcg3-gc64): this key
+  // took several seconds there and parses in tens of milliseconds on 5.0.1.
+  it("a long dotted key parses in linear time", () => {
+    const segments = 10000;
+    const key = Array.from({ length: segments }, (_, i) => `k${i}`).join(".");
+    const start = performance.now();
+    const data = toml.parse(`${key} = 1\n`) as Record<string, unknown>;
+    const elapsed = performance.now() - start;
+    let node: unknown = data;
+    for (let i = 0; i < segments; i++) node = (node as Record<string, unknown>)[`k${i}`];
+    expect(node).toBe(1);
+    expect(elapsed).toBeLessThan(1000);
   });
 
   it("keeps the value types of every other property", () => {
