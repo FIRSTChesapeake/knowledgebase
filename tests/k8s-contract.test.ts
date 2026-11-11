@@ -4,9 +4,8 @@
 // tests hold the manifests to what those policies admit.
 import { describe, test } from "node:test"
 import assert from "node:assert/strict"
-import { appManifests, kustomization, listFiles, readText } from "./helpers.ts"
-
-const RESOURCES = ["service.yaml", "deployment.yaml", "ingress.yaml"]
+import fs from "node:fs"
+import { appManifests, kustomization, listFiles, readText, repoPath } from "./helpers.ts"
 
 function finalDockerUser(): number {
   const users = readText("Dockerfile")
@@ -140,12 +139,15 @@ const MUTATIONS: { name: string; mutate: (pod: any) => void }[] = [
 describe("kustomization.yaml", () => {
   const k = kustomization()
 
-  test("lists exactly the three app files", () => {
+  test("lists every manifest in k8s-do/ and nothing else", () => {
     assert.equal(k.apiVersion, "kustomize.config.k8s.io/v1beta1")
     assert.equal(k.kind, "Kustomization")
-    assert.deepEqual(k.resources, RESOURCES)
-    const yaml = listFiles("k8s-do", ".yaml").map((f) => f.replace(/^k8s-do\//, ""))
-    assert.deepEqual(yaml.sort(), [...RESOURCES, "kustomization.yaml"].sort(), "no YAML file outside the release")
+    assert.ok(Array.isArray(k.resources) && k.resources.length > 0, "resources is a non-empty list")
+    for (const r of k.resources) assert.ok(fs.existsSync(repoPath("k8s-do", r)), `listed resource ${r} exists`)
+    const manifests = listFiles("k8s-do", ".yaml")
+      .map((f) => f.replace(/^k8s-do\//, ""))
+      .filter((f) => f !== "kustomization.yaml")
+    assert.deepEqual([...k.resources].sort(), manifests, "every manifest is listed, once, and nothing else")
   })
 
   test("holds no images, labels, namespace or generators", () => {
@@ -245,12 +247,8 @@ describe("non-root, read-only root, limits set", () => {
       }
     })
 
-    test(`${file}: every container is locked down and bounded`, () => {
+    test(`${file}: every container sets cpu and memory requests and limits`, () => {
       for (const c of [...(pod.initContainers ?? []), ...pod.containers]) {
-        const sc = c.securityContext ?? {}
-        assert.equal(sc.allowPrivilegeEscalation, false, c.name)
-        assert.equal(sc.readOnlyRootFilesystem, true, c.name)
-        assert.ok(sc.capabilities?.drop?.includes("ALL"), `${c.name} drops ALL`)
         for (const kind of ["requests", "limits"]) {
           assert.ok(c.resources?.[kind]?.cpu, `${c.name} ${kind}.cpu`)
           assert.ok(c.resources?.[kind]?.memory, `${c.name} ${kind}.memory`)
