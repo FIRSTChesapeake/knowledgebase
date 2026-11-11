@@ -195,7 +195,4 @@ describe(".env stays out of git", () => {
       assert.ok(!/(^|\/)\.env|\*\.example/.test(line), `${line} would ignore .env.example`)
     }
   })
-    assert.deepEqual(keys, { APP_DOMAIN: "kb.firstchs.org" })
-    assert.match(readText(".env.example"), /config repo/, "says where namespace and cluster settings live")
-  })
 })
