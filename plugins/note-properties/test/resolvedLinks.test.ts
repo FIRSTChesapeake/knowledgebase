@@ -68,14 +68,31 @@ describe("resolvedLinks (htmlPlugins)", () => {
     expect(resolved["duckdecide"]).toBe("../a/duckdecide");
   });
 
-  it("falls back when multiple slugs share the same filename", () => {
-    const resolved = getResolvedLinks('up: "[[samename]]"', "a/duckdecide", [
+  it("prefers the same-folder note when several notes share the file name", () => {
+    const resolved = getResolvedLinks('up: "[[samename#part]]"', "a/duckdecide", [
       "a/duckdecide",
       "a/samename",
       "nospace/samename",
     ]);
-    // Ambiguous under the shortest strategy: the bare name is taken as a root-level path.
+    expect(resolved["samename#part"]).toBe("../a/samename#part");
+  });
+
+  it("keeps the shared-name fallback when no same-name note is in the linking note's folder", () => {
+    const resolved = getResolvedLinks('up: "[[samename]]"', "c/duckdecide", [
+      "c/duckdecide",
+      "a/samename",
+      "nospace/samename",
+    ]);
     expect(resolved["samename"]).toBe("../samename");
+  });
+
+  it("resolves to the only note of that name when it lives in another folder", () => {
+    const resolved = getResolvedLinks('up: "[[samename]]"', "a/duckdecide", [
+      "a/duckdecide",
+      "a/othername",
+      "nospace/samename",
+    ]);
+    expect(resolved["samename"]).toBe("../nospace/samename");
   });
 
   it("resolves a wikilink that includes a folder prefix (disambiguation)", () => {

@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Frontmatter wikilinks containing spaces are now correctly slugified instead of rendering with `%20` in the href. `[[My Note]]` in a frontmatter property now renders as `./my-note` instead of `./My%20Note`.
+- An ambiguous frontmatter wikilink (two notes share the file name) now resolves to the note in the linking note's own folder when there is one, as in Obsidian, instead of a root-level path.
 
 ### Changed
 

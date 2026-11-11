@@ -147,6 +147,31 @@ function collectLinkTargetsFromValue(value: unknown): Set<string> {
   return targets;
 }
 
+/**
+ * When a bare link target names more than one note, picks the note in the
+ * linking note's own folder (as Obsidian does) by qualifying the target with
+ * that folder. Targets that are unambiguous, already carry a path, or have no
+ * same-folder match are returned unchanged.
+ */
+function preferSameFolder(
+  fileSlug: string,
+  target: string,
+  allSlugs: readonly string[],
+): string {
+  const hashIndex = target.indexOf("#");
+  const name = hashIndex === -1 ? target : target.slice(0, hashIndex);
+  const anchor = hashIndex === -1 ? "" : target.slice(hashIndex);
+  if (name === "" || name.includes("/") || name.startsWith(".")) return target;
+
+  const matches = allSlugs.filter((slug) => slug === name || slug.endsWith(`/${name}`));
+  if (matches.length < 2) return target;
+
+  const slashIndex = fileSlug.lastIndexOf("/");
+  if (slashIndex === -1) return target;
+  const sameFolder = `${fileSlug.slice(0, slashIndex)}/${name}`;
+  return matches.includes(sameFolder) ? sameFolder + anchor : target;
+}
+
 /** Quartz-internal frontmatter keys that should never appear in the properties table. */
 const QUARTZ_INTERNAL_KEYS = new Set([
   "quartz-properties",
@@ -356,7 +381,11 @@ export const NoteProperties: QuartzTransformerPlugin<Partial<NotePropertiesOptio
 
             const resolved: Record<string, string> = {};
             for (const target of targets) {
-              resolved[target] = transformLink(fileSlug, target, transformOptions);
+              resolved[target] = transformLink(
+                fileSlug,
+                preferSameFolder(fileSlug, target, ctx.allSlugs),
+                transformOptions,
+              );
             }
             noteProps.resolvedLinks = resolved;
           };
