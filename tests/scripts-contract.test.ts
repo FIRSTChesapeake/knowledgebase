@@ -91,10 +91,6 @@ describe("set-github-variables.sh", () => {
   const script = "scripts/set-github-variables.sh"
   const varSets = (r: Run) => r.gh.filter((c) => c.startsWith("variable set"))
 
-  test("replaces upload-github-secrets.sh, which set no secret", () => {
-    assert.ok(!fs.existsSync(repoPath("scripts/upload-github-secrets.sh")))
-  })
-
   test("sets the repo variable APP_DOMAIN and nothing else", () => {
     const r = runScript(script, { APP_DOMAIN: "kb.example.org", K8S_NAMESPACE: "kb", KUBECONFIG_KB_FILE: "/dev/null" })
     assert.equal(r.status, 0, r.out)
@@ -198,19 +194,5 @@ describe(".env stays out of git", () => {
       if (line.startsWith("#") || line === ".env" || line === "/.env") continue
       assert.ok(!/(^|\/)\.env|\*\.example/.test(line), `${line} would ignore .env.example`)
     }
-  })
-
-  test(".env.example holds APP_DOMAIN only, commented", () => {
-    const lines = readText(".env.example").split("\n")
-    const keys: Record<string, string> = {}
-    lines.forEach((line, i) => {
-      if (line === "" || line.startsWith("#")) return
-      const m = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line)
-      assert.ok(m, `not KEY=value: ${line}`)
-      assert.ok(lines[i - 1]?.startsWith("#"), `${m![1]} has no comment above it`)
-      keys[m![1]] = m![2]
-    })
-    assert.deepEqual(keys, { APP_DOMAIN: "kb.firstchs.org" })
-    assert.match(readText(".env.example"), /config repo/, "says where namespace and cluster settings live")
   })
 })

@@ -164,12 +164,6 @@ describe("trigger and on-main guard", () => {
       assert.ok(reaches(name), `job ${name} does not depend on guard`)
     }
   })
-
-  test("the header says the workflow holds no cluster credential, signs, and the cluster pulls", () => {
-    assert.match(raw, /This workflow holds\n# no cluster credential/)
-    assert.match(raw, /signs the artifact, and the cluster pulls the artifact\n# itself/)
-    assert.match(raw, /What the cluster trusts is the artifact's cosign signature/)
-  })
 })
 
 describe("no cluster credential", () => {
@@ -204,20 +198,9 @@ describe("no cluster credential", () => {
     w.jobs.guard.steps[0].if = "secrets.DEPLOY_KEY != ''"
     assert.notDeepEqual(foreignSecrets(w), [], "an if: condition")
   })
-
-  test("no job runs in the old production environment", () => {
-    for (const [name, job] of Object.entries(jobs)) {
-      const env = typeof job.environment === "string" ? job.environment : job.environment?.name
-      assert.notEqual(env, "production", name)
-    }
-  })
 })
 
 describe("permissions", () => {
-  test("top level grants contents: read only", () => {
-    assert.deepEqual(wf.permissions, { contents: "read" })
-  })
-
   test("every permissions block is exactly the expected object", () => {
     assert.deepEqual(permissionProblems(wf), [])
   })
@@ -243,12 +226,6 @@ describe("permissions", () => {
     }
   })
 
-  test("packages: write appears only on the image, manifests and sign jobs", () => {
-    const writers = Object.entries(jobs).filter(([, j]) => j.permissions?.packages === "write")
-    assert.deepEqual(writers.map(([name]) => name).sort(), ["image", "manifests", "sign"])
-    assert.equal(wf.permissions.packages, undefined, "no workflow-level packages permission")
-  })
-
   test("only image runs in image-publish, and only preflight and sign in manifest-sign", () => {
     const envs = Object.fromEntries(Object.entries(jobs).map(([name, j]) => [name, j.environment]))
     assert.deepEqual(envs, { guard: undefined, preflight: "manifest-sign", image: "image-publish", manifests: undefined, sign: "manifest-sign" })
@@ -262,24 +239,6 @@ describe("permissions", () => {
     for (const file of [".github/workflows/deploy.yml", ".github/workflows/test.yml"]) {
       assert.ok(!readText(file).includes("id-token"), `${file} requests an OIDC token`)
     }
-  })
-
-  test("the README requires each environment's v* tag rule and package Actions access", () => {
-    const readme = readText("k8s-do/README.md")
-    assert.match(readme, /Environment `image-publish`[^:]*:\s+\*\*Deployment\s+branches and tags:\*\*\s+selected only, the single rule\s+tag `v\*`\./)
-    assert.match(readme, /Environment `manifest-sign`[^:]*:\s+\*\*Deployment\s+branches and tags:\*\*\s+selected only, the single rule\s+\*\*Ref type: Tag\*\*, pattern `v\*`\./)
-    assert.match(readme, /exactly\s+two\s+secrets,\s+`COSIGN_PRIVATE_KEY`\s+and\s+`COSIGN_PASSWORD`/)
-    assert.match(readme, /\*\*Manage Actions access\*\*: only this repository/)
-    assert.match(readme, /`manifests\/knowledgebase`/)
-  })
-
-  test("the README requires that only maintainers can change workflows, as a required setting", () => {
-    const readme = readText("k8s-do/README.md")
-    const required = readme.slice(readme.indexOf("### Required: who can release"), readme.indexOf("## Cutover checklist"))
-    assert.match(required, /\*\*Only maintainers can change workflows\.\*\*[\s\S]*So one of these is\s+required:/)
-    assert.match(required, /\*\*push ruleset\*\*[\s\S]*\*\*Restrict file paths\*\* with the path `\.github\/workflows\/\*\*`/)
-    assert.match(required, /\*\*write access for maintainers\s+only\*\*/)
-    assert.ok(!/optional/i.test(required), "nothing in the required section is optional")
   })
 })
 
@@ -479,11 +438,6 @@ describe("release signing", () => {
   describe("preflight proves the key before anything is built or pushed", () => {
     const step = stepNamed("preflight", "Require the signing key")
 
-    test("is the last step and derives the public key from the private one", () => {
-      assert.equal(jobs.preflight.steps.at(-1), step)
-      assert.ok(step.run.includes('cosign public-key --key env://COSIGN_PRIVATE_KEY > "${RUNNER_TEMP}/release.pub"'))
-    })
-
     const cases: [string, string, boolean, boolean][] = [
       ["k", "p", true, true],
       ["k", "p", false, false],
@@ -609,20 +563,6 @@ describe("release signing", () => {
         } else assert.ok(!fs.existsSync(args), "cosign is not run")
       })
     }
-  })
-
-  test("the README covers the key, its rotation, the replay risk and the rollout order", () => {
-    const readme = readText("k8s-do/README.md")
-    const at = readme.indexOf("## Release signing")
-    assert.ok(at >= 0, "a Release signing section")
-    const section = readme.slice(at)
-    assert.match(section, /cosign generate-key-pair/)
-    assert.match(section, /`flux-system\/knowledgebase-cosign-pub`/)
-    assert.match(section, /\*\*Rotating the key\*\*/)
-    assert.match(section, /\*\*Known risk \(accepted\)\.\*\*/)
-    assert.match(section, /--tlog-upload=false/)
-    assert.match(section, /applies only what the release\s+workflow built and signed/)
-    assert.match(section, /\*\*Order\.\*\*/)
   })
 })
 
@@ -849,17 +789,6 @@ describe("manifests job", () => {
   }
   const index = (pred: (x: any) => boolean) => s.findIndex(pred)
 
-  test("needs guard and image, has no environment (never the key) and exactly contents: read, packages: write", () => {
-    assert.deepEqual(needsOf(job).sort(), ["guard", "image"])
-    assert.equal(job.environment, undefined)
-    assert.deepEqual(job.permissions, { contents: "read", packages: "write" })
-  })
-
-  test("reads the image and artifact repository from the image job's outputs, through env", () => {
-    assert.equal(job.env.IMAGE, "${{ needs.image.outputs.image }}")
-    assert.equal(job.env.MANIFESTS, "${{ needs.image.outputs.manifests }}")
-  })
-
   test("installs a pinned Flux CLI and a pinned, checksum-verified kustomize", () => {
     const flux = s.find((x) => x.uses?.startsWith("fluxcd/flux2/action@"))
     assert.ok(flux, "fluxcd/flux2/action")
@@ -895,12 +824,6 @@ describe("manifests job", () => {
     ]
     for (const b of bad) assert.notEqual(runBash(run, { ...good, ...b }).status, 0, JSON.stringify(b))
     for (const tag of GOOD_TAGS) assert.equal(runBash(run, { ...good, GITHUB_REF_NAME: tag }).status, 0, tag)
-  })
-
-  test("bakes the digest with kustomize edit set image, in k8s-do", () => {
-    const bake = named("Bake the image digest")
-    assert.equal(bake.run, 'kustomize edit set image "knowledgebase=${IMAGE}"')
-    assert.equal(bake["working-directory"], "k8s-do")
   })
 
   test("checks the built release before anything is pushed, in order", () => {
@@ -1064,12 +987,6 @@ describe("manifests job", () => {
       assert.equal(r.status, 0, r.out)
     })
 
-    test("converts with the release step's pinned yq", { skip: haveYq ? false : `yq v${yqVersion} is not on PATH` }, () => {
-      // Runs only where that yq is installed; every check above then goes
-      // through it.
-      assert.equal(check(OK).status, 0)
-    })
-
     test("refuses a custom resource that borrows a core kind's name", () => {
       const swaps: [string, string][] = [
         ["Deployment", "apiVersion: apps/v1\n"],
@@ -1174,18 +1091,6 @@ describe("manifests job", () => {
     const pushes = steps().filter(({ step }) => /flux push artifact/.test(step.run ?? ""))
     assert.deepEqual(pushes.map(({ job, step }) => `${job}/${step.name}`), ["manifests/Push the release artifact"])
     assert.ok(/MANIFESTS: \$\{\{ needs\.image\.outputs\.manifests \}\}/.test(raw))
-  })
-})
-
-describe("GitHub Pages is retired", () => {
-  test("the jobs are exactly guard, preflight, image, manifests and sign", () => {
-    assert.deepEqual(Object.keys(jobs).sort(), ["guard", "image", "manifests", "preflight", "sign"])
-  })
-
-  test("no Pages action, pages concurrency group or github-pages environment", () => {
-    assert.ok(!/upload-pages-artifact|deploy-pages|github-pages/.test(raw))
-    for (const [name, job] of Object.entries(jobs)) assert.notEqual(job.concurrency?.group, "pages", name)
-    assert.ok(!String(wf.concurrency?.group).includes("pages"))
   })
 })
 

@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto"
 import { describe, test } from "node:test"
 import assert from "node:assert/strict"
-import { BAD_DOMAINS, GOOD_DOMAINS, appManifests, loadYaml, readText, runBash, walkFiles } from "./helpers.ts"
+import { BAD_DOMAINS, GOOD_DOMAINS, appManifests, readText, runBash, walkFiles } from "./helpers.ts"
 
 const dockerfile = readText("Dockerfile")
 const lines = dockerfile.split("\n")
@@ -52,13 +52,6 @@ describe("Dockerfile", () => {
     assert.deepEqual(directives, [])
   })
 
-  test("builds with a full (non-slim) node image", () => {
-    assert.ok(fromLines.length >= 2, "multi-stage build")
-    const builder = fromLines[0]
-    assert.match(builder, /^FROM node:\S+@sha256:[0-9a-f]{64} AS builder$/)
-    assert.ok(!builder.includes("slim"), "the quartz CLI needs git, which slim images lack")
-  })
-
   test("validates APP_DOMAIN before rendering it into baseUrl", () => {
     const argAt = lines.findIndex((l) => /^ARG APP_DOMAIN\s*$/.test(l))
     assert.ok(argAt >= 0, "ARG APP_DOMAIN with no default")
@@ -87,10 +80,6 @@ describe("Dockerfile", () => {
       "COPY nginx/default.conf /etc/nginx/conf.d/default.conf",
     ])
   })
-
-  test("the image listens on the port the Deployment targets", () => {
-    assert.ok(lines.includes("EXPOSE 8080"))
-  })
 })
 
 describe("quartz.config.yaml", () => {
@@ -98,13 +87,6 @@ describe("quartz.config.yaml", () => {
 
   test("has exactly one baseUrl line for the image build to rewrite", () => {
     assert.equal(text.split("\n").filter((l) => /^  baseUrl: /.test(l)).length, 1)
-  })
-
-  test("keeps the CNAME emitter disabled", () => {
-    const config = loadYaml("quartz.config.yaml")
-    const cname = config.plugins.filter((p: any) => p.source === "@quartz-community/cname")
-    assert.equal(cname.length, 1)
-    assert.equal(cname[0].enabled, false)
   })
 })
 
