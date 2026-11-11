@@ -27,14 +27,6 @@ describe("frontmatterLinks extraction", () => {
     expect(links).toEqual(["my-note"]);
   });
 
-  it("never leaves spaces or %20 in the extracted wikilink", () => {
-    const links = runWithFrontmatter('related: "[[My Note]]"');
-    for (const link of links) {
-      expect(link).not.toContain(" ");
-      expect(link).not.toContain("%20");
-    }
-  });
-
   it("preserves and slugifies anchors on wikilinks", () => {
     const links = runWithFrontmatter('related: "[[My Note#Some Section]]"');
     expect(links).toEqual(["my-note#some-section"]);

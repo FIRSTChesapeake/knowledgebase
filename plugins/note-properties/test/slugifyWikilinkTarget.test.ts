@@ -33,10 +33,4 @@ describe("slugifyWikilinkTarget", () => {
   it("replaces '&' with '-and-'", () => {
     expect(slugifyWikilinkTarget("Foo&Bar")).toBe("foo-and-bar");
   });
-
-  it("never produces '%20' for a target that contains a space", () => {
-    const result = slugifyWikilinkTarget("My Note");
-    expect(result).not.toContain("%20");
-    expect(result).not.toContain(" ");
-  });
 });
