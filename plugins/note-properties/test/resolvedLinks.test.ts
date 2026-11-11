@@ -74,7 +74,8 @@ describe("resolvedLinks (htmlPlugins)", () => {
       "a/samename",
       "nospace/samename",
     ]);
-    expect(resolved["samename"]).toBeDefined();
+    // Ambiguous under the shortest strategy: the bare name is taken as a root-level path.
+    expect(resolved["samename"]).toBe("../samename");
   });
 
   it("resolves a wikilink that includes a folder prefix (disambiguation)", () => {
@@ -118,7 +119,8 @@ describe("resolvedLinks (htmlPlugins)", () => {
     const resolved = getResolvedLinks('link: "[label](./some/path)"', "nospace/goldensun", [
       "nospace/goldensun",
     ]);
-    expect(resolved["./some/path"]).toBeDefined();
+    // The shortest strategy resolves a ./ markdown target from the vault root, as in body links.
+    expect(resolved["./some/path"]).toBe("../some/path");
   });
 
   it("does not produce resolvedLinks when no links are present", () => {
